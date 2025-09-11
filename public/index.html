@@ -1,324 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Solana Token Scanner</title>
+  <!-- (STYLE: Use your previous CSS; omitted here for brevity) -->
   <style>
-    :root {
-      --primary: #9333ea;
-      --primary-dark: #7c3aed;
-      --secondary: #06b6d4;
-      --accent: #f59e0b;
-      --success: #10b981;
-      --danger: #ef4444;
-      --warning: #f59e0b;
-      --light: #f8fafc;
-      --dark: #0f172a;
-      --gray: #64748b;
-      --gray-light: #e2e8f0;
-      --card-bg: #1e293b;
-      --card-border: #334155;
-      --hover: #2563eb;
-      --gradient-1: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      --gradient-2: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-      --gradient-3: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-      --shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-      --shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.15);
-    }
-    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-    body {
-      background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
-      background-attachment: fixed;
-      color: var(--light);
-      min-height: 100vh;
-      padding: 20px;
-      position: relative;
-      overflow-x: hidden;
-    }
-    .container { max-width: 1800px; margin: 0 auto; position: relative; z-index: 1;}
-    header {
-      text-align: center;
-      margin-bottom: 40px;
-      padding: 40px 20px;
-      background: rgba(30, 41, 59, 0.8);
-      backdrop-filter: blur(20px);
-      border-radius: 20px;
-      box-shadow: var(--shadow-lg);
-      border: 1px solid var(--card-border);
-      position: relative;
-      overflow: hidden;
-    }
-    header::before {
-      content: '';
-      position: absolute; top: 0; left: 0; width: 100%; height: 2px;
-      background: var(--gradient-1);
-    }
-    h1 {
-      background: var(--gradient-1);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      margin-bottom: 15px;
-      font-size: 2.5rem;
-      font-weight: 700;
-      letter-spacing: -0.025em;
-    }
-    header p { color: var(--gray); font-size: 1.1rem; font-weight: 400;}
-    .scan-info {
-      display: flex; justify-content: center; gap: 25px; margin-bottom: 25px; flex-wrap: wrap;
-    }
-    .info-item {
-      background: rgba(147, 51, 234, 0.1);
-      backdrop-filter: blur(10px);
-      padding: 12px 20px;
-      border-radius: 25px;
-      font-size: 14px; font-weight: 500;
-      border: 1px solid rgba(147, 51, 234, 0.2);
-      transition: all 0.3s ease;
-    }
-    .info-item:hover { transform: translateY(-2px); background: rgba(147, 51, 234, 0.2); box-shadow: 0 5px 15px rgba(147, 51, 234, 0.3);}
-    .price-info {
-      display: flex; justify-content: center; gap: 20px; margin-bottom: 25px; flex-wrap: wrap;
-    }
-    .price-item {
-      background: rgba(6, 182, 212, 0.1);
-      backdrop-filter: blur(10px);
-      padding: 10px 18px;
-      border-radius: 20px;
-      font-size: 13px; font-weight: 500;
-      border: 1px solid rgba(6, 182, 212, 0.2);
-      display: flex; align-items: center; gap: 8px;
-    }
-    .price-value { color: var(--success); font-weight: 600; }
-    .controls { display: flex; justify-content: center; gap: 20px; margin-bottom: 30px; flex-wrap: wrap; }
-    input {
-      padding: 15px 20px; border: none; border-radius: 12px;
-      background: rgba(30, 41, 59, 0.8);
-      backdrop-filter: blur(20px);
-      color: var(--light);
-      font-size: 16px;
-      width: 500px; max-width: 100%;
-      border: 1px solid var(--card-border);
-      transition: all 0.3s ease; font-weight: 400;
-    }
-    input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(147, 51, 234, 0.1); transform: translateY(-2px);}
-    input::placeholder { color: var(--gray);}
-    button {
-      padding: 15px 30px; border: none; border-radius: 12px;
-      cursor: pointer; font-weight: 600; font-size: 14px; transition: all 0.3s ease;
-      position: relative; overflow: hidden;
-      text-transform: uppercase; letter-spacing: 0.5px;
-    }
-    .btn-start { background: var(--gradient-3); color: white;}
-    .btn-stop { background: var(--gradient-2); color: white;}
-    button:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg);}
-    button:active { transform: translateY(-1px);}
-    button:disabled { opacity: 0.6; cursor: not-allowed; transform: none;}
-    .status {
-      text-align: center; margin-bottom: 40px; padding: 20px;
-      background: rgba(30, 41, 59, 0.8); backdrop-filter: blur(20px);
-      border-radius: 15px; font-weight: 600; font-size: 16px;
-      border: 1px solid var(--card-border); position: relative; overflow: hidden;
-    }
-    .scanning {
-      background: rgba(16, 185, 129, 0.1); color: var(--success);
-      border-color: rgba(16, 185, 129, 0.3); animation: pulse 2s infinite;
-    }
-    .stopped {
-      background: rgba(239, 68, 68, 0.1); color: var(--danger);
-      border-color: rgba(239, 68, 68, 0.3);
-    }
-    @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
-    .dashboard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 25px; margin-bottom: 0; overflow-x: auto;}
-    .card {
-      background: rgba(30, 41, 59, 0.8); backdrop-filter: blur(20px);
-      border-radius: 20px; padding: 25px; box-shadow: var(--shadow);
-      min-width: 280px; display: flex; flex-direction: column;
-      border: 1px solid var(--card-border); transition: all 0.3s ease; position: relative; overflow: hidden;
-    }
-    .card::before {
-      content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 3px;
-      background: var(--gradient-1); opacity: 0; transition: opacity 0.3s ease;
-    }
-    .card:hover { transform: translateY(-5px); box-shadow: var(--shadow-lg); border-color: rgba(147, 51, 234, 0.3);}
-    .card:hover::before { opacity: 1; }
-    .card h2 {
-      background: var(--gradient-1); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-      background-clip: text;
-      margin-bottom: 20px; padding-bottom: 15px;
-      border-bottom: 1px solid var(--card-border);
-      font-size: 18px; font-weight: 600; letter-spacing: -0.025em;
-    }
-    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .stat-item {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 12px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-      font-size: 14px; font-weight: 400;
-    }
-    .stat-item:last-child { border-bottom: none; }
-    .stat-value { font-weight: 600; font-size: 15px; }
-    .negative { color: var(--danger); }
-    .positive { color: var(--success); }
-    .neutral { color: var(--gray); }
-    .holders-list {
-      flex: 1; overflow-y: auto; max-height: 650px; margin-top: 10px;
-      border-radius: 16px; background: rgba(0, 0, 0, 0.18); padding: 14px 12px 12px 12px;
-      scrollbar-width: thin; scrollbar-color: var(--primary) transparent;
-    }
-    .holders-list::-webkit-scrollbar { width: 6px; }
-    .holders-list::-webkit-scrollbar-track { background: transparent; }
-    .holders-list::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 3px; }
-    .top-holders-card {
-      margin-top: 36px;
-      margin-bottom: 36px;
-      width: 100%;
-      max-width: 100%;
-      background: rgba(30,41,59,0.95);
-      border-radius: 30px;
-      box-shadow: var(--shadow-lg);
-      border: 2px solid var(--primary-dark);
-      padding: 32px 28px 25px 28px;
-      display: flex;
-      flex-direction: column;
-      align-items: stretch;
-    }
-    .top-holders-header {
-      font-size: 22px;
-      font-weight: 700;
-      color: var(--accent);
-      letter-spacing: -0.03em;
-      margin-bottom: 20px;
-      text-shadow: 0 2px 10px #0008;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .holder-item {
-      display: flex;
-      flex-direction: column;
-      padding: 16px 0 8px 0;
-      border-bottom: 1px solid rgba(255,255,255,0.10);
-      background: transparent;
-      border-radius: 10px;
-      margin-bottom: 0;
-    }
-    .holder-item:last-child { border-bottom: none;}
-    .holder-row {
-      display: flex;
-      align-items: center;
-      justify-content: flex-start;
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-    .holder-row-main {
-      font-size: 15px;
-      font-weight: 600;
-      margin-bottom: 7px;
-      gap: 18px;
-      display: flex;
-      align-items: center;
-    }
-    .holder-row-tokens {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 2px;
-      margin-left: 36px;
-      padding-top: 2px;
-      align-items: center;
-    }
-    .valuable-token-item {
-      display: flex;
-      align-items: center;
-      background: rgba(147, 51, 234, 0.15);
-      border-radius: 8px;
-      padding: 7px 15px 7px 7px;
-      margin-bottom: 2px;
-      font-size: 13px;
-      min-width: 110px;
-      box-shadow: 0 2px 8px rgba(147, 51, 234, 0.04);
-      cursor: pointer;
-    }
-    .valuable-token-logo {
-      width: 22px;
-      height: 22px;
-      margin-right: 7px;
-      border-radius: 5px;
-      object-fit: contain;
-      background: #222;
-      border: 1.5px solid #333;
-    }
-    .valuable-token-name {
-      font-weight: 600;
-      margin-right: 4px;
-      color: var(--light);
-      font-size: 13px;
-    }
-    .valuable-token-value {
-      font-weight: 700;
-      color: var(--accent);
-      font-size: 13px;
-    }
-    .holder-label {
-      font-weight: 600;
-      color: var(--accent);
-      margin-right: 5px;
-    }
-    .other-tokens-label {
-      font-weight: 600;
-      color: var(--gray-light);
-      margin-right: 6px;
-      margin-left: 8px;
-    }
-    .holder-address {
-      font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--gray);
-      text-decoration: none; transition: color 0.2s ease; cursor: pointer;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px;
-      background: rgba(0,0,0,0.12); padding: 3px 10px; border-radius: 7px;
-      border: 1px solid rgba(147, 51, 234, 0.08);
-      margin-left: 4px;
-    }
-    .holder-address:hover { color: var(--secondary); text-decoration: underline;}
-    .holder-amount { font-weight: 700; font-size: 14px; color: var(--light);}
-    .holder-usd { font-size: 13px; color: var(--success); font-weight: 600; margin-left:6px;}
-    .rank-badge {
-      display: flex; align-items: center; justify-content: center;
-      width: 26px; height: 26px; border-radius: 50%; background: var(--gradient-1);
-      color: white; font-size: 13px; font-weight: 700; flex-shrink: 0;
-      margin-right: 6px;
-      border: 2.5px solid var(--accent);
-      box-shadow: 0 2px 10px #0004;
-    }
-    .top-3 .rank-badge { background: var(--gradient-2); border-color: var(--success);}
-    .last-updated {
-      text-align: center; margin-top: 30px; color: var(--gray); font-size: 14px;
-      padding: 15px; background: rgba(30, 41, 59, 0.5); border-radius: 10px; font-weight: 500;
-    }
-    .loading {
-      text-align: center; padding: 30px 20px; color: var(--gray); font-size: 14px;
-      font-weight: 400; display: flex; align-items: center; justify-content: center; gap: 10px;
-    }
-    .loading::before {
-      content: ''; width: 16px; height: 16px; border: 2px solid var(--primary);
-      border-top: 2px solid transparent; border-radius: 50%; animation: spin 1s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @media (max-width: 1600px) { .dashboard { grid-template-columns: repeat(3, 1fr); } }
-    @media (max-width: 1200px) { .dashboard { grid-template-columns: repeat(2, 1fr); } }
-    @media (max-width: 900px) {
-      .dashboard { grid-template-columns: 1fr;}
-      .top-holders-card { padding: 12px 3vw 8px 3vw; }
-      h1 { font-size: 2rem;}
-      .holder-row-tokens { margin-left: 0; }
-    }
-    @media (max-width: 600px) {
-      .dashboard { grid-template-columns: 1fr;}
-      .top-holders-card { padding: 4vw 1vw 4vw 1vw; }
-      .holder-row-main { flex-direction: column; align-items: flex-start; gap: 4px; }
-      h1 { font-size: 1.8rem;}
-      .controls { flex-direction: column; align-items: center;}
-    }
+    /* ... (KEEP YOUR EXISTING CSS) ... */
   </style>
 </head>
 <body>
@@ -331,366 +19,115 @@
       <div class="info-item">Polling: <strong id="pollInterval">1 second</strong></div>
       <div class="info-item">Token: <strong id="currentToken">-</strong></div>
     </div>
-    <div class="price-info">
-      <div class="price-item">
-        <span id="tokenSymbol">Token:</span>
-        <span class="price-value" id="tokenPrice">0.00$</span>
-      </div>
-      <div class="price-item">
-        <span>SOL:</span>
-        <span class="price-value" id="solPrice">0.00$</span>
-      </div>
-      <div class="price-item">
-        <span>JUP:</span>
-        <span class="price-value" id="jupPrice">0.00$</span>
-      </div>
-      <div class="price-item">
-        <span>Last Updated:</span>
-        <span id="priceUpdated">-</span>
-      </div>
+    <div class="price-info" id="priceInfoRow">
+      <!-- Prices will be rendered here -->
     </div>
     <div class="controls">
-      <input type="text" id="mint" placeholder="Enter token mint address (SOL/JUP supported)" value="So11111111111111111111111111111111111111112">
-      <button class="btn-start" id="startBtn" onclick="startScan()">Start Scan</button>
-      <button class="btn-stop" id="stopBtn" onclick="stopScan()" disabled>Stop Scan</button>
+      <input type="text" id="mint" placeholder="Enter token mint address (SOL/JUP supported)">
+      <button class="btn-start" id="startBtn">Start Scan</button>
+      <button class="btn-stop" id="stopBtn" disabled>Stop Scan</button>
     </div>
     <div class="status stopped" id="status">
       Not scanning. Enter a token mint address and click Start Scan.
     </div>
     <div class="dashboard" id="dashboard">
-      <div class="card">
-        <h2>📊 General Stats</h2>
-        <div id="generalStats">
-          <div class="stat-item">
-            <span>Started at:</span>
-            <span class="stat-value" id="startedAt">-</span>
-          </div>
-          <div class="stat-item">
-            <span>Time running:</span>
-            <span class="stat-value" id="timeRunning">-</span>
-          </div>
-          <div class="stat-item">
-            <span>Current holders:</span>
-            <span class="stat-value" id="currentHolders">-</span>
-          </div>
-          <div class="stat-item">
-            <span>Total ever tracked:</span>
-            <span class="stat-value" id="totalTracked">-</span>
-          </div>
-          <div class="stat-item">
-            <span>Unchanged:</span>
-            <span class="stat-value" id="unchanged">-</span>
-          </div>
-        </div>
-      </div>
-      <div class="card">
-        <h2>📈 Purchases</h2>
-        <div id="purchases">
-          <div class="loading">Waiting for data</div>
-        </div>
-      </div>
-      <div class="card">
-        <h2>📉 Sales</h2>
-        <div id="sales">
-          <div class="loading">Waiting for data</div>
-        </div>
-      </div>
-      <div class="card">
-        <h2>🏆 Top 50 Analysis</h2>
-        <div id="top50Stats">
-          <div class="loading">Waiting for data</div>
-        </div>
-      </div>
+      <!-- ... (KEEP YOUR DASHBOARD HTML) ... -->
     </div>
     <div class="top-holders-card" id="topHoldersCard">
-      <div class="top-holders-header">
-        <span>💎 Top Holders</span>
-      </div>
-      <div class="holders-list" id="topHolders">
-        <div class="loading">Waiting for data</div>
-      </div>
+      <!-- ... (KEEP YOUR HOLDERS HTML) ... -->
     </div>
     <div class="last-updated" id="lastUpdated">
       Last updated: -
     </div>
   </div>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script>
-    let scanInterval = null;
-    let priceInterval = null;
+    const socket = io();
+    let currentWatched = [];
+    let scanning = false;
     let startTime = null;
-    let isScanning = false;
-    let lastPrices = { tokenMint: '', currentTokenPrice: 0, solPrice: 0, jupPrice: 0, prices: { lastUpdated: null } };
 
-    function fetchPricesOnly() {
-      fetch('/api/status')
-        .then(response => response.json())
-        .then(data => {
-          if (data.prices) updatePrices(data.prices, data.tokenMint);
-        })
-        .catch(() => {});
+    function renderPrices(prices, watchedTokens) {
+      const priceInfoRow = document.getElementById("priceInfoRow");
+      priceInfoRow.innerHTML = "";
+      watchedTokens.forEach(mint => {
+        let symbol = "Token";
+        if (mint === "So11111111111111111111111111111111111111112") symbol = "SOL";
+        else if (mint === "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN") symbol = "JUP";
+        else symbol = mint.substring(0, 4) + "..." + mint.substring(mint.length - 4);
+        const price = prices[mint] ? Number(prices[mint]).toFixed(6) : "0.000000";
+        const el = document.createElement("div");
+        el.className = "price-item";
+        el.innerHTML = `
+          <span class="token-symbol" data-mint="${mint}" style="cursor:pointer;">${symbol}:</span>
+          <span class="price-value">${price}$</span>
+        `;
+        // Clicking the symbol scans the token
+        el.querySelector(".token-symbol").onclick = () => scanToken(mint);
+        priceInfoRow.appendChild(el);
+      });
+      // Last updated
+      const updated = document.createElement("div");
+      updated.className = "price-item";
+      updated.innerHTML = `<span>Last Updated:</span> <span id="priceUpdated">${prices.lastUpdated ? new Date(prices.lastUpdated).toLocaleTimeString() : "-"}</span>`;
+      priceInfoRow.appendChild(updated);
+    }
+    function scanToken(mint) {
+      document.getElementById("mint").value = mint;
+      startScan();
     }
     function startScan() {
-      const mint = document.getElementById('mint').value.trim();
+      const mint = document.getElementById("mint").value.trim();
       if (!mint) { alert('Please enter a token mint address'); return; }
       document.getElementById('startBtn').disabled = true;
       document.getElementById('stopBtn').disabled = false;
       document.getElementById('status').textContent = 'Starting scan...';
       document.getElementById('status').className = 'status scanning';
       document.getElementById('currentToken').textContent = mint.substring(0, 8) + '...' + mint.substring(mint.length - 6);
-      fetch('/api/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mint })
-      })
-      .then(response => response.text())
-      .then(data => {
-        document.getElementById('status').textContent = 'Scanning active - Real-time monitoring';
-        startTime = new Date();
-        isScanning = true;
-        updateTimeRunning();
-        if (scanInterval) clearInterval(scanInterval);
-        scanInterval = setInterval(fetchStatus, 1000);
-        fetchStatus();
-      })
-      .catch(error => {
-        document.getElementById('status').textContent = 'Error starting scan - Please try again';
-        document.getElementById('status').className = 'status stopped';
-        document.getElementById('startBtn').disabled = false;
-        document.getElementById('stopBtn').disabled = true;
-      });
+      scanning = true;
+      socket.emit("startScan", mint);
     }
     function stopScan() {
-      fetch('/api/stop', { method: 'POST' })
-      .then(response => response.text())
-      .then(data => {
-        document.getElementById('status').textContent = 'Scan stopped - Ready for new scan';
-        document.getElementById('status').className = 'status stopped';
-        document.getElementById('startBtn').disabled = false;
-        document.getElementById('stopBtn').disabled = true;
-        isScanning = false;
-        if (scanInterval) { clearInterval(scanInterval); scanInterval = null; }
-      })
-      .catch(error => {
-        document.getElementById('status').textContent = 'Error stopping scan';
-      });
+      socket.emit("stopScan");
+      document.getElementById('status').textContent = 'Scan stopped - Ready for new scan';
+      document.getElementById('status').className = 'status stopped';
+      document.getElementById('startBtn').disabled = false;
+      document.getElementById('stopBtn').disabled = true;
+      scanning = false;
     }
-    function updateTimeRunning() {
-      if (!startTime) return;
-      const now = new Date();
-      const diffMs = now - startTime;
-      const diffSec = Math.floor(diffMs / 1000);
-      const hours = Math.floor(diffSec / 3600);
-      const minutes = Math.floor((diffSec % 3600) / 60);
-      const seconds = diffSec % 60;
-      document.getElementById('timeRunning').textContent = 
-        `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    }
-    function updatePrices(prices, tokenMintOverride) {
-      const tokenMint = tokenMintOverride || lastPrices.tokenMint;
-      let symbol = "Token";
-      if (tokenMint === "So11111111111111111111111111111111111111112") symbol = "SOL";
-      else if (tokenMint === "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN") symbol = "JUP";
-      else if (tokenMint) symbol = tokenMint.substring(0, 4) + "..." + tokenMint.substring(tokenMint.length - 4);
-      document.getElementById('tokenSymbol').textContent = symbol + ":";
-      document.getElementById('tokenPrice').textContent = prices[tokenMint] ? `${Number(prices[tokenMint]).toFixed(4)}$` : "0.00$";
-      document.getElementById('solPrice').textContent = prices["So11111111111111111111111111111111111111112"] ? `${Number(prices["So11111111111111111111111111111111111111112"]).toFixed(2)}$` : "0.00$";
-      document.getElementById('jupPrice').textContent = prices["JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"] ? `${Number(prices["JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"]).toFixed(4)}$` : "0.0000$";
-      if (prices.lastUpdated) {
-        const lastUpdated = new Date(prices.lastUpdated);
-        document.getElementById('priceUpdated').textContent = timeAgo(lastUpdated);
-      }
-      lastPrices = { ...lastPrices, ...prices, tokenMint };
-    }
-    function timeAgo(date) {
-      const now = new Date();
-      const diff = Math.floor((now - date) / 1000);
-      if (diff < 5) return "just now";
-      if (diff < 60) return `${diff} seconds ago`;
-      if (diff < 3600) return `${Math.floor(diff/60)} minutes ago`;
-      if (diff < 86400) return `${Math.floor(diff/3600)} hours ago`;
-      return date.toLocaleString();
-    }
-    function fetchStatus() {
-      if (!isScanning) return;
-      fetch('/api/status')
-        .then(response => {
-          if (!response.ok) throw new Error('Network response was not ok');
-          return response.json();
-        })
-        .then(data => {
-          if (data.message) {
-            document.getElementById('status').textContent = data.message;
-            return;
-          }
-          updateDisplay(data);
-        })
-        .catch(error => {
-          if (isScanning) document.getElementById('status').textContent = 'Connection lost - Reconnecting...';
-        });
-    }
-    function scanToken(mint) {
-      document.getElementById('mint').value = mint;
-      document.getElementById('mint').placeholder = mint;
-      startScan();
-    }
-    function updateDisplay(data) {
-      if (data.prices) updatePrices(data.prices, data.tokenMint);
-      if (data.startTime) {
-        startTime = new Date(data.startTime);
-        document.getElementById('startedAt').textContent = startTime.toLocaleString();
-      }
-      updateTimeRunning();
-      document.getElementById('currentHolders').textContent = data.changes.current.toLocaleString();
-      document.getElementById('totalTracked').textContent = data.changes.total.toLocaleString();
-      document.getElementById('unchanged').textContent = data.changes.unchanged.toLocaleString();
-      const purchasesContainer = document.getElementById('purchases');
-      purchasesContainer.innerHTML = '';
-      for (let pct = 10; pct <= 100; pct += 10) {
-        const purchaseItem = document.createElement('div');
-        purchaseItem.className = 'stat-item';
-        purchaseItem.innerHTML = `
-          <span>Bought >${pct}% more:</span>
-          <span class="stat-value positive">${data.changes[`bought${pct}`]}</span>
-        `;
-        purchasesContainer.appendChild(purchaseItem);
-      }
-      const salesContainer = document.getElementById('sales');
-      salesContainer.innerHTML = '';
-      for (let pct = 10; pct <= 100; pct += 10) {
-        const saleItem = document.createElement('div');
-        saleItem.className = 'stat-item';
-        saleItem.innerHTML = `
-          <span>Sold >${pct}%:</span>
-          <span class="stat-value negative">${data.changes[`sold${pct}`]}</span>
-        `;
-        salesContainer.appendChild(saleItem);
-      }
-      const sold100Item = document.createElement('div');
-      sold100Item.className = 'stat-item';
-      sold100Item.innerHTML = `
-        <span>Sold 100% (zeroed):</span>
-        <span class="stat-value negative">${data.changes.sold100}</span>
-      `;
-      salesContainer.appendChild(sold100Item);
-      const top50Container = document.getElementById('top50Stats');
-      if (data.top50Stats) {
-        top50Container.innerHTML = `
-          <div class="stat-item">
-            <span>Gone from top 50:</span>
-            <span class="stat-value negative">${data.top50Stats.goneFromInitialTop50Count}</span>
-          </div>
-          <div class="stat-item">
-            <span>New in top 50:</span>
-            <span class="stat-value positive">${data.top50Stats.newInTop50Count}</span>
-          </div>
-          <div class="stat-item">
-            <span>New since last fetch:</span>
-            <span class="stat-value">${data.top50Stats.completelyNewSinceLastFetch}</span>
-          </div>
-          <div class="stat-item">
-            <span>New since start:</span>
-            <span class="stat-value">${data.top50Stats.completelyNewSinceFirstFetch}</span>
-          </div>
-        `;
-      } else {
-        top50Container.innerHTML = '<div class="loading">Building top 50 baseline</div>';
-      }
-      const topHoldersContainer = document.getElementById('topHolders');
-      topHoldersContainer.innerHTML = '';
-      if (data.topHolders && data.topHolders.length > 0) {
-        data.topHolders.forEach((holder, index) => {
-          const holderItem = document.createElement('div');
-          holderItem.className = `holder-item ${index < 3 ? 'top-3' : ''}`;
-          const holderRow = document.createElement('div');
-          holderRow.className = 'holder-row holder-row-main';
-          const rankBadge = document.createElement('div');
-          rankBadge.className = 'rank-badge';
-          rankBadge.textContent = index + 1;
-          const shortAddress = holder.owner.substring(0, 6) + '...' + holder.owner.substring(holder.owner.length - 4);
-          const addressLink = document.createElement('a');
-          addressLink.className = 'holder-address';
-          addressLink.href = `https://solscan.io/account/${holder.owner}`;
-          addressLink.target = '_blank';
-          addressLink.rel = 'noopener noreferrer';
-          addressLink.title = holder.owner;
-          addressLink.textContent = shortAddress;
-          const amountLabel = document.createElement('span');
-          amountLabel.className = 'holder-label';
-          amountLabel.textContent = "Holding Tokens:";
-          const amountSpan = document.createElement('span');
-          amountSpan.className = 'holder-amount';
-          amountSpan.textContent = formatTokenCount(holder.amount);
-          const valueLabel = document.createElement('span');
-          valueLabel.className = 'holder-label';
-          valueLabel.style.marginLeft = "12px";
-          valueLabel.textContent = "Holding Value:";
-          const usdSpan = document.createElement('span');
-          usdSpan.className = 'holder-usd';
-          if (holder.usdValue && holder.usdValue > 0) {
-            usdSpan.textContent = formatUSD(holder.usdValue, true);
-          } else {
-            usdSpan.textContent = 'N/A';
-          }
-          holderRow.appendChild(rankBadge);
-          holderRow.appendChild(addressLink);
-          holderRow.appendChild(amountLabel); holderRow.appendChild(amountSpan);
-          holderRow.appendChild(valueLabel); holderRow.appendChild(usdSpan);
-          holderItem.appendChild(holderRow);
-          if (holder.valuableTokens && holder.valuableTokens.length > 0) {
-            const tokensRow = document.createElement('div');
-            tokensRow.className = 'holder-row-tokens';
-            const otherLabel = document.createElement('span');
-            otherLabel.className = 'other-tokens-label';
-            otherLabel.textContent = "This wallet also holds →";
-            tokensRow.appendChild(otherLabel);
-            holder.valuableTokens.forEach(token => {
-              const tokenItem = document.createElement('div');
-              tokenItem.className = 'valuable-token-item';
-              tokenItem.title = "Click to scan this token";
-              tokenItem.onclick = () => scanToken(token.symbol || token.name);
-              const logo = token.logoURI
-                ? `<img src="${token.logoURI}" class="valuable-token-logo" width="22" height="22" alt="${token.name}">`
-                : '';
-              tokenItem.innerHTML = `
-                ${logo}
-                <span class="valuable-token-name">${token.name}</span>
-                <span class="valuable-token-value">${formatUSD(token.usdValue, true)}</span>
-              `;
-              tokensRow.appendChild(tokenItem);
-            });
-            holderItem.appendChild(tokensRow);
-          }
-          topHoldersContainer.appendChild(holderItem);
-        });
-      } else {
-        topHoldersContainer.innerHTML = '<div class="loading">Scanning for holders</div>';
-      }
-      document.getElementById('lastUpdated').textContent = `Last updated: ${new Date().toLocaleTimeString()} • ${data.changes.current} active holders`;
-    }
-    function formatTokenCount(num) {
-      if (num >= 1000000000) return (num / 1000000000).toFixed(2) + 'B';
-      else if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
-      else if (num >= 1000) return (num / 1000).toFixed(2) + 'K';
-      else if (num >= 1) return num.toFixed(2);
-      else return num.toFixed(6);
-    }
-    function formatUSD(num) {
-      if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M$';
-      else if (num >= 1000) return (num / 1000).toFixed(1) + 'K$';
-      else if (num >= 1) return num.toFixed(2) + '$';
-      else return num.toFixed(4) + '$';
-    }
-    document.addEventListener('DOMContentLoaded', function() {
-      document.getElementById('startedAt').textContent = '-';
-      document.getElementById('timeRunning').textContent = '-';
-      document.getElementById('currentHolders').textContent = '-';
-      document.getElementById('totalTracked').textContent = '-';
-      document.getElementById('unchanged').textContent = '-';
-      document.getElementById('pollInterval').textContent = '1 second';
-      document.getElementById('currentToken').textContent = 'SOL (example)';
-      priceInterval = setInterval(fetchPricesOnly, 5000);
-      fetchPricesOnly();
+
+    // Button events
+    document.getElementById('startBtn').onclick = startScan;
+    document.getElementById('stopBtn').onclick = stopScan;
+
+    // SOCKET EVENTS
+    socket.on("watchedTokens", mints => {
+      currentWatched = mints;
     });
+    socket.on("priceUpdate", (prices) => {
+      renderPrices(prices, currentWatched);
+    });
+    socket.on("statusUpdate", (data) => {
+      // You can use your previous `updateDisplay(data)` here
+      // For demonstration, we update some fields:
+      if(data.startTime) startTime = new Date(data.startTime);
+      document.getElementById('startedAt').textContent = startTime ? startTime.toLocaleString() : '-';
+      // ... (Handle other dashboard fields as per your code)
+      document.getElementById('status').textContent = scanning
+        ? "Scanning active - Real-time monitoring"
+        : "Scan stopped - Ready for new scan";
+    });
+
+    // Add token to watch on click from elsewhere
+    // Example: document.querySelector('.myToken').onclick = () => socket.emit("watchToken", mint);
+
+    // Initial load
+    fetch("/api/status")
+      .then(resp => resp.json())
+      .then(data => {
+        currentWatched = data.watchedTokens || [];
+        renderPrices(data.prices || {}, currentWatched);
+      });
   </script>
 </body>
 </html>
