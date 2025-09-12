@@ -10,6 +10,7 @@ const TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const SOL_MINT = "So11111111111111111111111111111111111111112";
 const JUP_MINT = "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN";
 const JUPITER_BATCH_SIZE = 100;
+const MAX_TOP_HOLDERS = 20;
 
 const connection = new Connection(RPC_ENDPOINT, "confirmed");
 const app = express();
@@ -40,11 +41,9 @@ const storage = {
 function logError(...args) {
   console.error("==> [ERROR]", ...args);
 }
-
 function logInfo(...args) {
   console.log("==>", ...args);
 }
-
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -307,7 +306,7 @@ async function pollData() {
       storage.previousTop50MinAmount
     );
 
-    const topHoldersRaw = [...fresh].sort((a, b) => b.amount - a.amount).slice(0, 20);
+    const topHoldersRaw = [...fresh].sort((a, b) => b.amount - a.amount).slice(0, MAX_TOP_HOLDERS);
 
     storage.latestData = {
       fresh,
