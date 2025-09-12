@@ -132,7 +132,7 @@
     @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
     .dashboard {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 25px;
       margin-bottom: 0;
       overflow-x: auto;
@@ -185,6 +185,11 @@
       flex-direction: column;
       align-items: stretch;
       height: 100%;
+      grid-row: span 2;
+      grid-column: span 1;
+      min-width: 400px;
+      min-height: 540px;
+      max-height: 1100px;
     }
     .top-holders-header {
       font-size: 18px;
@@ -403,7 +408,7 @@
 
     function showNotification(msg, variant = "important", timeout = 3500) {
       const bar = document.getElementById("notificationBar");
-      bar.textContent = msg;
+      bar.innerHTML = msg;
       bar.className = "notification-bar show " + variant;
       setTimeout(() => { bar.classList.remove("show"); }, timeout);
     }
@@ -547,6 +552,10 @@
     let allTimeTop50SetLocal = new Set();
     let prevTop50SetLocal = new Set();
 
+    function notificationAddressList(list) {
+      return list.map(addr => `<a href="https://solscan.io/account/${addr}" style="color:#fff;text-decoration:underline;" target="_blank">${addr.substring(0,6)}...${addr.substring(addr.length-4)}</a>`).join(', ');
+    }
+
     function updateDisplay(data) {
       if (data.prices) updatePrices(data.prices, data.tokenMint, data.tokenName, data.tokenSymbol);
       if (data.tokenName && data.tokenSymbol) {
@@ -573,10 +582,10 @@
       }
 
       // Calculate new/gone since last fetch
-      let newSinceLast = 0, goneSinceLast = 0;
+      let newSinceLastList = [], goneSinceLastList = [];
       if (prevTop50SetLocal.size > 0) {
-        newSinceLast = freshTop50.filter(h => !prevTop50SetLocal.has(h)).length;
-        goneSinceLast = [...prevTop50SetLocal].filter(h => !freshTop50.includes(h)).length;
+        newSinceLastList = freshTop50.filter(h => !prevTop50SetLocal.has(h));
+        goneSinceLastList = [...prevTop50SetLocal].filter(h => !freshTop50.includes(h));
       }
       prevTop50SetLocal = new Set(freshTop50);
 
@@ -586,30 +595,48 @@
       let allTimeNewCount = allTimeTop50SetLocal.size - initialTop50Set.size;
 
       // Show notification bar
-      if (goneSinceLast > 0) showNotification(`⚠️ ${goneSinceLast} top holder(s) gone from top 50!`, "danger", 3200);
-      if (newSinceLast > 0) showNotification(`🆕 ${newSinceLast} new top holders entered top 50!`, "success", 3200);
+      if (goneSinceLastList.length > 0) {
+        showNotification(
+          `⚠️ <b>${goneSinceLastList.length}</b> top holder(s) gone: ${notificationAddressList(goneSinceLastList)}`,
+          "danger", 4200
+        );
+      }
+      if (newSinceLastList.length > 0) {
+        showNotification(
+          `🆕 <b>${newSinceLastList.length}</b> new top holder(s): ${notificationAddressList(newSinceLastList)}`,
+          "success", 4200
+        );
+      }
 
-      // Attention info in first card
+      // Attention info in first card (no inline stats anymore)
       let attentionText = `
         <div>
-          <span style="color:#ef4444;font-weight:600;">Gone from top 50:</span> ${goneSinceLast} &nbsp;
-          <span style="color:#10b981;font-weight:600;">New in top 50:</span> ${newSinceLast} &nbsp;
+          <span style="color:#ef4444;font-weight:600;">Gone from top 50 (since last):</span> ${goneSinceLastList.length} &nbsp;
+          <span style="color:#10b981;font-weight:600;">New in top 50 (since last):</span> ${newSinceLastList.length} &nbsp;
           <span style="color:#f59e0b;font-weight:600;">New since start:</span> ${newSinceStart} &nbsp;
           <span style="color:#8b5cf6;font-weight:600;">All-time unique top 50:</span> ${allTimeNewCount}
         </div>`;
       document.getElementById('top50Attention').innerHTML = attentionText;
 
-      // Top 50 Stats (was in removed card, now appended here)
-      const top50StatsHtml = `
+      // Top 50 Stats (from backend)
+      const top50StatsHtml = data.top50Stats ? `
           <div class="stat-item">
             <span>Gone from top 50 (since initial):</span>
-            <span class="stat-value negative">${data.top50Stats ? data.top50Stats.goneFromInitialTop50Count : 0}</span>
+            <span class="stat-value negative">${data.top50Stats.goneFromInitialTop50Count}</span>
           </div>
           <div class="stat-item">
             <span>New in top 50 (since initial):</span>
-            <span class="stat-value positive">${data.top50Stats ? data.top50Stats.newInTop50Count : 0}</span>
+            <span class="stat-value positive">${data.top50Stats.newInTop50Count}</span>
           </div>
-      `;
+          <div class="stat-item">
+            <span>New since last fetch (backend):</span>
+            <span class="stat-value">${data.top50Stats.completelyNewSinceLastFetch ?? 0}</span>
+          </div>
+          <div class="stat-item">
+            <span>New since start (backend):</span>
+            <span class="stat-value">${data.top50Stats.completelyNewSinceFirstFetch ?? 0}</span>
+          </div>
+      ` : "";
       document.getElementById("top50Stats").innerHTML = top50StatsHtml;
 
       // Purchases/Sales
