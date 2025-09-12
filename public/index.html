@@ -130,7 +130,13 @@
       border-color: rgba(239, 68, 68, 0.3);
     }
     @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
-    .dashboard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 25px; margin-bottom: 0; overflow-x: auto;}
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 25px;
+      margin-bottom: 0;
+      overflow-x: auto;
+    }
     .card {
       background: rgba(30, 41, 59, 0.8); backdrop-filter: blur(20px);
       border-radius: 20px; padding: 25px; box-shadow: var(--shadow);
@@ -170,25 +176,22 @@
     .holders-list::-webkit-scrollbar-track { background: transparent; }
     .holders-list::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 3px; }
     .top-holders-card {
-      margin-top: 36px;
-      margin-bottom: 36px;
-      width: 100%;
-      max-width: 100%;
       background: rgba(30,41,59,0.95);
-      border-radius: 30px;
+      border-radius: 20px;
       box-shadow: var(--shadow-lg);
       border: 2px solid var(--primary-dark);
-      padding: 32px 28px 25px 28px;
+      padding: 25px 10px 10px 10px;
       display: flex;
       flex-direction: column;
       align-items: stretch;
+      height: 100%;
     }
     .top-holders-header {
-      font-size: 22px;
+      font-size: 18px;
       font-weight: 700;
       color: var(--accent);
       letter-spacing: -0.03em;
-      margin-bottom: 20px;
+      margin-bottom: 14px;
       text-shadow: 0 2px 10px #0008;
       display: flex;
       align-items: center;
@@ -196,87 +199,28 @@
     }
     .holder-item {
       display: flex;
-      flex-direction: column;
-      padding: 16px 0 8px 0;
+      flex-direction: row;
+      align-items: center;
+      padding: 10px 0 6px 0;
       border-bottom: 1px solid rgba(255,255,255,0.10);
       background: transparent;
       border-radius: 10px;
       margin-bottom: 0;
+      gap: 18px;
     }
     .holder-item:last-child { border-bottom: none;}
-    .holder-row {
-      display: flex;
-      align-items: center;
-      justify-content: flex-start;
-      flex-wrap: wrap;
-      gap: 12px;
-    }
     .holder-row-main {
       font-size: 15px;
       font-weight: 600;
-      margin-bottom: 7px;
-      gap: 18px;
-      display: flex;
-      align-items: center;
-    }
-    .holder-row-tokens {
-      display: flex;
-      flex-wrap: wrap;
       gap: 10px;
-      margin-top: 2px;
-      margin-left: 36px;
-      padding-top: 2px;
-      align-items: center;
-    }
-    .valuable-token-item {
       display: flex;
       align-items: center;
-      background: rgba(147, 51, 234, 0.15);
-      border-radius: 8px;
-      padding: 7px 15px 7px 7px;
-      margin-bottom: 2px;
-      font-size: 13px;
-      min-width: 110px;
-      box-shadow: 0 2px 8px rgba(147, 51, 234, 0.04);
-      cursor: pointer;
-    }
-    .valuable-token-logo {
-      width: 22px;
-      height: 22px;
-      margin-right: 7px;
-      border-radius: 5px;
-      object-fit: contain;
-      background: #222;
-      border: 1.5px solid #333;
-    }
-    .valuable-token-name {
-      font-weight: 600;
-      margin-right: 4px;
-      color: var(--light);
-      font-size: 13px;
-    }
-    .valuable-token-value {
-      font-weight: 700;
-      color: var(--accent);
-      font-size: 13px;
-    }
-    .holder-label {
-      font-weight: 600;
-      color: var(--accent);
-      margin-right: 5px;
-      font-size: 14px;
-    }
-    .other-tokens-label {
-      font-weight: 600;
-      color: var(--gray-light);
-      margin-right: 6px;
-      margin-left: 8px;
-      font-size: 13px;
+      flex-direction: row;
     }
     .holder-address {
       font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--gray);
       text-decoration: none; transition: color 0.2s ease; cursor: pointer;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100px;
       background: rgba(0,0,0,0.12); padding: 3px 10px; border-radius: 7px;
       border: 1px solid rgba(147, 51, 234, 0.08);
       margin-left: 4px;
@@ -306,13 +250,13 @@
       border-top: 2px solid transparent; border-radius: 50%; animation: spin 1s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-    @media (max-width: 1600px) { .dashboard { grid-template-columns: repeat(3, 1fr); } }
-    @media (max-width: 1200px) { .dashboard { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 1600px) { .dashboard { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 1200px) { .dashboard { grid-template-columns: 1fr 1fr; } }
     @media (max-width: 900px) {
       .dashboard { grid-template-columns: 1fr;}
       .top-holders-card { padding: 12px 3vw 8px 3vw; }
       h1 { font-size: 2rem;}
-      .holder-row-tokens { margin-left: 0; }
+      .holder-row-main { flex-direction: column; align-items: flex-start; gap: 4px; }
     }
     @media (max-width: 600px) {
       .dashboard { grid-template-columns: 1fr;}
@@ -321,7 +265,6 @@
       h1 { font-size: 1.8rem;}
       .controls { flex-direction: column; align-items: center;}
     }
-    /* Notification bar style added */
     .notification-bar {
       position: fixed;
       top: 15px;
@@ -398,9 +341,8 @@
     <div class="status stopped" id="status">
       Not scanning. Enter a token mint address and click Start Scan.
     </div>
-    <div id="attentionTop50" style="text-align:center; margin:18px 0; font-weight:700; color:#f59e0b;"></div>
     <div class="dashboard" id="dashboard">
-      <div class="card">
+      <div class="card" id="generalStatsCard">
         <h2>📊 General Stats</h2>
         <div id="generalStats">
           <div class="stat-item">
@@ -424,32 +366,27 @@
             <span class="stat-value" id="unchanged">-</span>
           </div>
         </div>
+        <div id="top50Attention" style="margin-top:22px;padding:10px 0 0 0;font-weight:700;color:#f59e0b;"></div>
       </div>
       <div class="card">
         <h2>📈 Purchases</h2>
-        <div id="purchases">
-          <div class="loading">Waiting for data</div>
-        </div>
+        <div id="purchases"><div class="loading">Waiting for data</div></div>
       </div>
       <div class="card">
         <h2>📉 Sales</h2>
-        <div id="sales">
-          <div class="loading">Waiting for data</div>
-        </div>
+        <div id="sales"><div class="loading">Waiting for data</div></div>
       </div>
       <div class="card">
         <h2>🏆 Top 50 Analysis</h2>
-        <div id="top50Stats">
+        <div id="top50Stats"><div class="loading">Waiting for data</div></div>
+      </div>
+      <div class="top-holders-card" id="topHoldersCard">
+        <div class="top-holders-header">
+          <span>💎 Top Holders</span>
+        </div>
+        <div class="holders-list" id="topHolders">
           <div class="loading">Waiting for data</div>
         </div>
-      </div>
-    </div>
-    <div class="top-holders-card" id="topHoldersCard">
-      <div class="top-holders-header">
-        <span>💎 Top Holders</span>
-      </div>
-      <div class="holders-list" id="topHolders">
-        <div class="loading">Waiting for data</div>
       </div>
     </div>
     <div class="last-updated" id="lastUpdated">
@@ -462,8 +399,10 @@
     let startTime = null;
     let isScanning = false;
     let lastPrices = { tokenMint: '', currentTokenPrice: 0, solPrice: 0, jupPrice: 0, prices: { lastUpdated: null } };
-    let lastGone = 0, lastNew = 0;
-    let lastHistoryGone = 0, lastHistoryNew = 0;
+    let prevTop50Set = new Set();
+    let allTimeTop50Set = new Set();
+    let top50StatsHistory = [];
+    let prevInitialTop50 = [];
 
     function showNotification(msg, variant = "important", timeout = 3500) {
       const bar = document.getElementById("notificationBar");
@@ -489,6 +428,11 @@
       document.getElementById('status').textContent = 'Starting scan...';
       document.getElementById('status').className = 'status scanning';
       document.getElementById('currentToken').textContent = mint.substring(0, 8) + '...' + mint.substring(mint.length - 6);
+
+      prevTop50Set = new Set();
+      allTimeTop50Set = new Set();
+      top50StatsHistory = [];
+      prevInitialTop50 = [];
 
       fetch('/api/start', {
         method: 'POST',
@@ -601,6 +545,11 @@
       startScan();
     }
 
+    // --- Top50 memory tracking for frontend ---
+    let initialTop50Set = null;
+    let allTimeTop50SetLocal = new Set();
+    let prevTop50SetLocal = new Set();
+
     function updateDisplay(data) {
       if (data.prices) updatePrices(data.prices, data.tokenMint, data.tokenName, data.tokenSymbol);
       if (data.tokenName && data.tokenSymbol) {
@@ -617,32 +566,41 @@
       document.getElementById('totalTracked').textContent = data.changes.total.toLocaleString();
       document.getElementById('unchanged').textContent = data.changes.unchanged.toLocaleString();
 
-      // --- Notification logic ---
-      let gone = 0, goneTs = 0, newTop = 0, newTs = 0;
-      if (data.goneFromTop50History && data.goneFromTop50History.length) {
-        const lastGoneObj = data.goneFromTop50History[data.goneFromTop50History.length-1];
-        gone = lastGoneObj.count;
-        goneTs = lastGoneObj.ts;
+      // TOP 50 MEMORY LOGIC
+      let freshTop50 = [];
+      if (data.topHolders) {
+        freshTop50 = data.topHolders.map(h => h.owner);
+        if (!initialTop50Set) initialTop50Set = new Set(freshTop50);
+        // All-time set
+        freshTop50.forEach(addr => allTimeTop50SetLocal.add(addr));
       }
-      if (data.newTop50History && data.newTop50History.length) {
-        const lastNewObj = data.newTop50History[data.newTop50History.length-1];
-        newTop = lastNewObj.count;
-        newTs = lastNewObj.ts;
+
+      // Calculate new/gone since last fetch
+      let newSinceLast = 0, goneSinceLast = 0;
+      if (prevTop50SetLocal.size > 0) {
+        newSinceLast = freshTop50.filter(h => !prevTop50SetLocal.has(h)).length;
+        goneSinceLast = [...prevTop50SetLocal].filter(h => !freshTop50.includes(h)).length;
       }
-      // Only show popup if new event in last 5 seconds
-      const now = Date.now();
-      if (gone > 0 && goneTs && now - goneTs < 4000 && gone !== lastHistoryGone) {
-        showNotification(`⚠️ Attention: ${gone} top holder(s) gone from top 50!`, "danger", 3200);
-        lastHistoryGone = gone;
-      }
-      if (newTop > 0 && newTs && now - newTs < 4000 && newTop !== lastHistoryNew) {
-        showNotification(`🆕 New top holders: ${newTop} entered top 50!`, "success", 3200);
-        lastHistoryNew = newTop;
-      }
-      let attentionText = "";
-      if (gone > 0) attentionText += `⚠️ <b>${gone}</b> top holders gone from top 50. `;
-      if (newTop > 0) attentionText += `🆕 <b>${newTop}</b> new top holders appeared.`;
-      document.getElementById("attentionTop50").innerHTML = attentionText;
+      prevTop50SetLocal = new Set(freshTop50);
+
+      // Calculate new since start
+      let newSinceStart = freshTop50.filter(h => !initialTop50Set.has(h)).length;
+      // Calculate ever new top50 count
+      let allTimeNewCount = allTimeTop50SetLocal.size - initialTop50Set.size;
+
+      // Show notification bar
+      if (goneSinceLast > 0) showNotification(`⚠️ ${goneSinceLast} top holder(s) gone from top 50!`, "danger", 3200);
+      if (newSinceLast > 0) showNotification(`🆕 ${newSinceLast} new top holders entered top 50!`, "success", 3200);
+
+      // Attention info in first card
+      let attentionText = `
+        <div>
+          <span style="color:#ef4444;font-weight:600;">Gone from top 50:</span> ${goneSinceLast} &nbsp;
+          <span style="color:#10b981;font-weight:600;">New in top 50:</span> ${newSinceLast} &nbsp;
+          <span style="color:#f59e0b;font-weight:600;">New since start:</span> ${newSinceStart} &nbsp;
+          <span style="color:#8b5cf6;font-weight:600;">All-time unique top 50:</span> ${allTimeNewCount}
+        </div>`;
+      document.getElementById('top50Attention').innerHTML = attentionText;
 
       // Purchases/Sales
       const purchasesContainer = document.getElementById('purchases');
@@ -675,7 +633,7 @@
       `;
       salesContainer.appendChild(sold100Item);
 
-      // Top 50 Stats
+      // Top 50 Stats (keep for completeness)
       const top50Container = document.getElementById('top50Stats');
       if (data.top50Stats) {
         top50Container.innerHTML = `
@@ -687,28 +645,19 @@
             <span>New in top 50:</span>
             <span class="stat-value positive">${data.top50Stats.newInTop50Count}</span>
           </div>
-          <div class="stat-item">
-            <span>New since last fetch:</span>
-            <span class="stat-value">${data.top50Stats.completelyNewSinceLastFetch}</span>
-          </div>
-          <div class="stat-item">
-            <span>New since start:</span>
-            <span class="stat-value">${data.top50Stats.completelyNewSinceFirstFetch}</span>
-          </div>
         `;
       } else {
         top50Container.innerHTML = '<div class="loading">Building top 50 baseline</div>';
       }
 
-      // Top Holders
+      // Top Holders (single row, no text, just value/amount)
       const topHoldersContainer = document.getElementById('topHolders');
       topHoldersContainer.innerHTML = '';
       if (data.topHolders && data.topHolders.length > 0) {
         data.topHolders.forEach((holder, index) => {
           const holderItem = document.createElement('div');
           holderItem.className = `holder-item ${index < 3 ? 'top-3' : ''}`;
-          const holderRow = document.createElement('div');
-          holderRow.className = 'holder-row holder-row-main';
+          // Remove label text, just show badge, address, amount, usd
           const rankBadge = document.createElement('div');
           rankBadge.className = 'rank-badge';
           rankBadge.textContent = index + 1;
@@ -720,28 +669,21 @@
           addressLink.rel = 'noopener noreferrer';
           addressLink.title = holder.owner;
           addressLink.textContent = shortAddress;
-          const amountLabel = document.createElement('span');
-          amountLabel.className = 'holder-label';
-          amountLabel.textContent = "Holding Tokens:";
           const amountSpan = document.createElement('span');
           amountSpan.className = 'holder-amount';
           amountSpan.textContent = formatTokenCount(holder.amount);
-          const valueLabel = document.createElement('span');
-          valueLabel.className = 'holder-label';
-          valueLabel.style.marginLeft = "12px";
-          valueLabel.textContent = "Holding Value:";
           const usdSpan = document.createElement('span');
           usdSpan.className = 'holder-usd';
+          usdSpan.style.marginLeft = "14px";
           if (holder.usdValue && holder.usdValue > 0) {
             usdSpan.textContent = formatUSD(holder.usdValue, true);
           } else {
             usdSpan.textContent = 'N/A';
           }
-          holderRow.appendChild(rankBadge);
-          holderRow.appendChild(addressLink);
-          holderRow.appendChild(amountLabel); holderRow.appendChild(amountSpan);
-          holderRow.appendChild(valueLabel); holderRow.appendChild(usdSpan);
-          holderItem.appendChild(holderRow);
+          holderItem.appendChild(rankBadge);
+          holderItem.appendChild(addressLink);
+          holderItem.appendChild(amountSpan);
+          holderItem.appendChild(usdSpan);
           topHoldersContainer.appendChild(holderItem);
         });
       } else {
