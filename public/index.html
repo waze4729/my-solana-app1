@@ -371,7 +371,6 @@
             <span class="stat-value" id="unchanged">-</span>
           </div>
         </div>
-        <div id="top50Attention" style="margin-top:22px;padding:10px 0 0 0;font-weight:700;color:#f59e0b;"></div>
         <div id="top50Stats" style="margin-top:8px;"></div>
       </div>
       <div class="card">
@@ -608,16 +607,6 @@
         );
       }
 
-      // Attention info in first card (no inline stats anymore)
-      let attentionText = `
-        <div>
-          <span style="color:#ef4444;font-weight:600;">Gone from top 50 (since last):</span> ${goneSinceLastList.length} &nbsp;
-          <span style="color:#10b981;font-weight:600;">New in top 50 (since last):</span> ${newSinceLastList.length} &nbsp;
-          <span style="color:#f59e0b;font-weight:600;">New since start:</span> ${newSinceStart} &nbsp;
-          <span style="color:#8b5cf6;font-weight:600;">All-time unique top 50:</span> ${allTimeNewCount}
-        </div>`;
-      document.getElementById('top50Attention').innerHTML = attentionText;
-
       // Top 50 Stats (from backend)
       const top50StatsHtml = data.top50Stats ? `
           <div class="stat-item">
@@ -677,7 +666,6 @@
         data.topHolders.forEach((holder, index) => {
           const holderItem = document.createElement('div');
           holderItem.className = `holder-item ${index < 3 ? 'top-3' : ''}`;
-          // Remove label text, just show badge, address, amount, usd
           const rankBadge = document.createElement('div');
           rankBadge.className = 'rank-badge';
           rankBadge.textContent = index + 1;
