@@ -6,6 +6,7 @@ import fetch from "node-fetch";
 const { Connection, PublicKey } = web3;
 const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
 const JUPITER_API_URL_V3 = "https://lite-api.jup.ag/price/v3?ids=";
+const JUPITER_TOKENINFO_URL = "https://lite-api.jup.ag/tokens/v1/";
 const TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const SOL_MINT = "So11111111111111111111111111111111111111112";
 const JUP_MINT = "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN";
@@ -21,12 +22,16 @@ app.use(express.static("public"));
 
 const storage = {
   tokenMint: "",
+  tokenName: "",
+  tokenSymbol: "",
   registry: {},
   initialTop50: null,
   initialTop50Amounts: new Map(),
   previousTop50: new Set(),
   previousTop50MinAmount: 0,
   allTimeNewTop50: new Set(),
+  goneFromTop50History: [],
+  newTop50History: [],
   scanning: false,
   latestData: null,
   pollInterval: null,
@@ -48,25 +53,39 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function fetchTokenMeta(mint) {
+  try {
+    const res = await fetch(JUPITER_TOKENINFO_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mints: [mint] })
+    });
+    if (!res.ok) return {};
+    const data = await res.json();
+    if (data && data[mint]) {
+      return { name: data[mint].name, symbol: data[mint].symbol };
+    }
+    return {};
+  } catch (e) {
+    return {};
+  }
+}
+
 async function fetchJupiterPricesV3(mints, maxBatchSize = JUPITER_BATCH_SIZE) {
   let prices = {};
-
   for (let i = 0; i < mints.length; i += maxBatchSize) {
     const batch = mints.slice(i, i + maxBatchSize);
     let tries = 0;
     let success = false;
-
     while (tries < 2 && !success) {
       try {
         const url = JUPITER_API_URL_V3 + batch.join(",");
         const response = await fetch(url);
-
         if (!response.ok) {
           const body = await response.text();
           logError(`Jupiter V3 API HTTP ${response.status} for batch:`, batch, "Body:", body);
           break;
         }
-
         let priceData;
         try {
           priceData = await response.json();
@@ -74,7 +93,6 @@ async function fetchJupiterPricesV3(mints, maxBatchSize = JUPITER_BATCH_SIZE) {
           logError(`Invalid JSON from Jupiter V3 for batch:`, batch, err.message);
           break;
         }
-
         for (const mint of batch) {
           if (priceData[mint] && typeof priceData[mint].usdPrice === "number") {
             prices[mint] = {
@@ -223,18 +241,16 @@ async function analyzeTop50(fresh, initialTop50, initialTop50Amounts, previousTo
     (currentTop50Map.get(owner) > previousTop50MinAmount)
   );
 
-  const newSinceFirstFetch = currentTop50.filter(owner =>
-    storage.allTimeNewTop50.has(owner)
-  ).length;
-
-  newSinceLastFetch.forEach(owner => {
-    storage.allTimeNewTop50.add(owner);
-  });
-
-  const stillInTop50 = initialTop50.filter(owner => currentTop50.includes(owner));
   const goneFromInitialTop50 = initialTop50.filter(owner => !currentTop50.includes(owner));
   const newInTop50 = currentTop50.filter(owner => !initialTop50.includes(owner));
 
+  // Update notification histories for frontend
+  if (goneFromInitialTop50.length > 0)
+    storage.goneFromTop50History.push({ ts: Date.now(), count: goneFromInitialTop50.length });
+  if (newInTop50.length > 0)
+    storage.newTop50History.push({ ts: Date.now(), count: newInTop50.length });
+
+  const stillInTop50 = initialTop50.filter(owner => currentTop50.includes(owner));
   const top50Sales = { sold100: 0, sold50: 0, sold25: 0, };
   const top50Buys = { bought100: 0, bought50: 0, bought25: 0, bought10: 0, };
 
@@ -270,8 +286,8 @@ async function analyzeTop50(fresh, initialTop50, initialTop50Amounts, previousTo
     stillInTop50Count: stillInTop50.length,
     goneFromInitialTop50Count: goneFromInitialTop50.length,
     newInTop50Count: newInTop50.length,
-    completelyNewSinceLastFetch: newSinceLastFetch.length,
-    completelyNewSinceFirstFetch: newSinceFirstFetch,
+    goneFromInitialTop50,
+    newInTop50,
     top50Sales,
     top50Buys,
   };
@@ -318,6 +334,10 @@ async function pollData() {
       startTime: storage.startTime,
       prices: { ...storage.prices },
       tokenMint: storage.tokenMint,
+      tokenName: storage.tokenName,
+      tokenSymbol: storage.tokenSymbol,
+      goneFromTop50History: storage.goneFromTop50History,
+      newTop50History: storage.newTop50History,
       topHolders: topHoldersRaw
     };
   } catch (error) {
@@ -336,8 +356,15 @@ app.post("/api/start", async (req, res) => {
   storage.previousTop50 = new Set();
   storage.previousTop50MinAmount = 0;
   storage.allTimeNewTop50 = new Set();
+  storage.goneFromTop50History = [];
+  storage.newTop50History = [];
   storage.scanning = true;
   storage.startTime = new Date();
+
+  // Fetch token meta for name/symbol display
+  const meta = await fetchTokenMeta(mint);
+  storage.tokenName = meta.name || "Token";
+  storage.tokenSymbol = meta.symbol || "";
 
   if (storage.pollInterval) clearInterval(storage.pollInterval);
 
@@ -365,11 +392,15 @@ app.get("/api/status", (req, res) => {
     return res.json({
       message: "No data yet",
       prices: { ...storage.prices },
-      tokenMint: storage.tokenMint
+      tokenMint: storage.tokenMint,
+      tokenName: storage.tokenName,
+      tokenSymbol: storage.tokenSymbol,
     });
   }
 
   storage.latestData.tokenMint = storage.tokenMint;
+  storage.latestData.tokenName = storage.tokenName;
+  storage.latestData.tokenSymbol = storage.tokenSymbol;
   storage.latestData.currentTokenPrice = storage.prices[storage.tokenMint] || 0;
   storage.latestData.solPrice = storage.prices[SOL_MINT] || 0;
   storage.latestData.jupPrice = storage.prices[JUP_MINT] || 0;
