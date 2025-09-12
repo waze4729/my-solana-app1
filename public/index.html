@@ -367,6 +367,7 @@
           </div>
         </div>
         <div id="top50Attention" style="margin-top:22px;padding:10px 0 0 0;font-weight:700;color:#f59e0b;"></div>
+        <div id="top50Stats" style="margin-top:8px;"></div>
       </div>
       <div class="card">
         <h2>📈 Purchases</h2>
@@ -375,10 +376,6 @@
       <div class="card">
         <h2>📉 Sales</h2>
         <div id="sales"><div class="loading">Waiting for data</div></div>
-      </div>
-      <div class="card">
-        <h2>🏆 Top 50 Analysis</h2>
-        <div id="top50Stats"><div class="loading">Waiting for data</div></div>
       </div>
       <div class="top-holders-card" id="topHoldersCard">
         <div class="top-holders-header">
@@ -602,6 +599,19 @@
         </div>`;
       document.getElementById('top50Attention').innerHTML = attentionText;
 
+      // Top 50 Stats (was in removed card, now appended here)
+      const top50StatsHtml = `
+          <div class="stat-item">
+            <span>Gone from top 50 (since initial):</span>
+            <span class="stat-value negative">${data.top50Stats ? data.top50Stats.goneFromInitialTop50Count : 0}</span>
+          </div>
+          <div class="stat-item">
+            <span>New in top 50 (since initial):</span>
+            <span class="stat-value positive">${data.top50Stats ? data.top50Stats.newInTop50Count : 0}</span>
+          </div>
+      `;
+      document.getElementById("top50Stats").innerHTML = top50StatsHtml;
+
       // Purchases/Sales
       const purchasesContainer = document.getElementById('purchases');
       purchasesContainer.innerHTML = '';
@@ -632,23 +642,6 @@
         <span class="stat-value negative">${data.changes.sold100}</span>
       `;
       salesContainer.appendChild(sold100Item);
-
-      // Top 50 Stats (keep for completeness)
-      const top50Container = document.getElementById('top50Stats');
-      if (data.top50Stats) {
-        top50Container.innerHTML = `
-          <div class="stat-item">
-            <span>Gone from top 50:</span>
-            <span class="stat-value negative">${data.top50Stats.goneFromInitialTop50Count}</span>
-          </div>
-          <div class="stat-item">
-            <span>New in top 50:</span>
-            <span class="stat-value positive">${data.top50Stats.newInTop50Count}</span>
-          </div>
-        `;
-      } else {
-        top50Container.innerHTML = '<div class="loading">Building top 50 baseline</div>';
-      }
 
       // Top Holders (single row, no text, just value/amount)
       const topHoldersContainer = document.getElementById('topHolders');
