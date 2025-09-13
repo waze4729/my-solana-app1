@@ -19,8 +19,11 @@ const PORT = process.env.PORT || 10000;
 const HELIUS_API_KEY = "07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
 const HELIUS_POOL = "GhMtn6GQbyUHijhiLitGdSxR1FBTQ5XhXuYJUP15pWJn";
 const HELIUS_TXS_URL = `https://api.helius.xyz/v0/addresses/${HELIUS_POOL}/transactions?api-key=${HELIUS_API_KEY}`;
+
 app.use(bodyParser.json());
 app.use(express.static("public"));
+
+// Pool volume endpoint with logging
 app.get("/api/pool-volume", async (req, res) => {
   try {
     const now = Math.floor(Date.now() / 1000);
@@ -30,12 +33,19 @@ app.get("/api/pool-volume", async (req, res) => {
     let keepGoing = true;
     let tries = 0;
 
-    // Fetch up to 1000 recent txs (for demo, can optimize/paginate as needed)
     while (keepGoing && tries < 5) {
       let url = HELIUS_TXS_URL + "&limit=100" + (before ? `&before=${before}` : "");
       const resp = await fetch(url);
+      // Log the raw API response (status and url)
+      console.log(`[pool-volume] Fetching: ${url} - Status: ${resp.status}`);
       if (!resp.ok) break;
       const txs = await resp.json();
+      // Log the returned chunk (truncated for readability if large)
+      console.log(`[pool-volume] Got ${Array.isArray(txs) ? txs.length : "?"} txs from Helius API`);
+      if (Array.isArray(txs) && txs.length > 0) {
+        // Optionally log the first tx for debugging
+        console.log("[pool-volume] Example tx:", JSON.stringify(txs[0], null, 2));
+      }
       if (!Array.isArray(txs) || txs.length === 0) break;
       allTxs = allTxs.concat(txs);
       before = txs[txs.length - 1]?.signature;
@@ -50,24 +60,25 @@ app.get("/api/pool-volume", async (req, res) => {
     // Only keep txs in the last 24h
     allTxs = allTxs.filter((tx) => tx.timestamp >= since);
 
+    // Log number of txs used for the volume calc
+    console.log(`[pool-volume] Total txs in last 24h: ${allTxs.length}`);
+
     // Parse all swap instructions and sum USD value (if any)
     let usdVolume = 0;
     for (const tx of allTxs) {
       if (!tx?.events?.swap) continue;
-      // Helius Enhanced API: swap event has .nativeInput and .nativeOutput
-      // We'll use .nativeInput.amount or .nativeOutput.amount and .nativeInput.mint/USD value if available
       let usd = 0;
       if (tx.events.swap.nativeInput?.usd) usd = tx.events.swap.nativeInput.usd;
       else if (tx.events.swap.nativeOutput?.usd) usd = tx.events.swap.nativeOutput.usd;
       usdVolume += usd;
     }
+    console.log(`[pool-volume] USD volume for pool in last 24h: ${usdVolume}`);
     res.json({ pool: HELIUS_POOL, volume24h: usdVolume });
   } catch (e) {
     logError("pool-volume:", e.message || e);
     res.status(500).json({ error: "Failed to fetch pool volume" });
   }
 });
-
 
 const storage = {
   tokenMint: "",
@@ -468,4 +479,3 @@ app.get("/api/status", (req, res) => {
 app.listen(PORT, () => {
   logInfo(`Server running on port ${PORT}`);
 });
-
