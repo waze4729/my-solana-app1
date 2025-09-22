@@ -455,9 +455,9 @@ app.get("/", (req, res) => {
     </div>
     <div class="terminal-container">
       <div class="ascii-header">
-[BACKROOMS LEVEL ∞] // TERMINAL ACCESS GRANTED //  MODE ACTIVE <BR>
+
 REWARD 40% OF COLLECTED FEE TO TOP CHAD ATH BUYER
-FEE COLLECTING AND REWARDING TOP CHAD EVERY +0.5 SOL
+FEE COLLECTING AND REWARDING TOP 3 CHADS EVERY +0.5 SOL
 TOKEN: ${TOKEN_MINT}
       </div>
       <!-- ATH HERO SECTION -->
@@ -648,6 +648,7 @@ loop().catch(e => {
   logToConsole(`💥 Fatal error: ${e.message}`, 'error');
   process.exit(1);
 });
+
 
 
 
