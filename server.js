@@ -1,25 +1,29 @@
 import { Connection, Keypair, PublicKey, LAMPORTS_PER_SOL, SystemProgram, Transaction } from "@solana/web3.js";
 import { OnlinePumpSdk } from "@pump-fun/pump-sdk";
 import fetch from 'node-fetch';
+import express from 'express';
+import { WebSocketServer } from 'ws';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// === CONFIG ===
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const CREATOR_RPC_ENDPOINT = "https://api.mainnet-beta.solana.com";
 const SCANNER_RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
 const PUMP_TOKEN_MINT = "Gupf4N7c9WWr87naP2pC2m5JCwrs8QFBRB6yC1Xomxr7";
-const SECRET_KEY = new Uint8Array([
-
-]);
+const SECRET_KEY = new Uint8Array([]);
 const MIN_FEES_TO_COLLECT_SOL = 0.05;
 const ATH_BUY_MIN_SOL = 0.1;
-const VOLUME_THRESHOLD = 10; // 10 SOL volume threshold for Hall of Fame
+const VOLUME_THRESHOLD = 10;
 const POLL_INTERVAL_MS = 2000;
+const PORT = process.env.PORT || 3000;
 
 const creatorConnection = new Connection(CREATOR_RPC_ENDPOINT, "confirmed");
 const scannerConnection = new Connection(SCANNER_RPC_ENDPOINT, { commitment: "confirmed" });
 const wallet = Keypair.fromSecretKey(SECRET_KEY);
 const sdk = new OnlinePumpSdk(creatorConnection);
 
-// Game State
 let BOSS = {
   hp: 100,
   maxHp: 100,
@@ -32,8 +36,26 @@ let PLAYERS = new Map();
 let HALL_OF_FAME = new Map();
 let ATH = { wallet: null, solAmount: 0, usdValue: 0, signature: "", timestamp: 0 };
 let TOTAL_VOLUME = { buys: 0, sells: 0 };
+let TOTAL_TRANSACTIONS = 0;
 
-// HTML Elements
+const app = express();
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/', (req, res) => {
+  res.send(createGameInterface());
+});
+
+app.get('/api/game-state', (req, res) => {
+  res.json({
+    boss: BOSS,
+    totalVolume: TOTAL_VOLUME,
+    ath: ATH,
+    players: Object.fromEntries(PLAYERS),
+    hallOfFame: Object.fromEntries(HALL_OF_FAME),
+    totalTxs: TOTAL_TRANSACTIONS
+  });
+});
+
 function createGameInterface() {
   return `
 <!DOCTYPE html>
@@ -160,9 +182,7 @@ function createGameInterface() {
             </div>
             
             <h3>🎮 Players/Holders</h3>
-            <div class="players-grid" id="players-container">
-                <!-- Player cards will be dynamically inserted here -->
-            </div>
+            <div class="players-grid" id="players-container"></div>
             
             <div class="battle-log" id="battle-log">
                 <div class="log-entry">🚀 Game started! Waiting for transactions...</div>
@@ -171,9 +191,7 @@ function createGameInterface() {
         
         <div class="sidebar">
             <h3>🏆 Hall of Fame</h3>
-            <div id="hall-of-fame">
-                <!-- Hall of Fame entries will appear here -->
-            </div>
+            <div id="hall-of-fame"></div>
             
             <h3 style="margin-top: 30px;">📊 Live Stats</h3>
             <div id="live-stats">
@@ -186,50 +204,48 @@ function createGameInterface() {
 
     <script>
         function updateGameState(data) {
-            // Update boss HP
             document.querySelector('.boss-health-bar').style.width = data.boss.hp + '%';
             document.querySelector('#boss-hp').textContent = data.boss.hp.toFixed(1);
-            
-            // Update stats
             document.querySelector('#total-buys').textContent = data.totalVolume.buys.toFixed(2) + ' SOL';
             document.querySelector('#total-sells').textContent = data.totalVolume.sells.toFixed(2) + ' SOL';
-            document.querySelector('#ath-wallet').textContent = data.ath.wallet ? 
-                data.ath.wallet.substring(0,8) + '...' : 'None';
+            document.querySelector('#ath-wallet').textContent = data.ath.wallet ? data.ath.wallet.substring(0,8) + '...' : 'None';
             document.querySelector('#ath-amount').textContent = data.ath.solAmount.toFixed(2) + ' SOL';
-            document.querySelector('#active-players').textContent = data.players.size;
+            document.querySelector('#active-players').textContent = data.players ? Object.keys(data.players).length : 0;
             document.querySelector('#total-txs').textContent = data.totalTxs;
             
-            // Update players grid
             const playersContainer = document.querySelector('#players-container');
             playersContainer.innerHTML = '';
-            data.players.forEach((player, wallet) => {
-                const playerCard = document.createElement('div');
-                playerCard.className = 'player-card';
-                playerCard.innerHTML = \`
-                    <div class="player-avatar">👤</div>
-                    <div style="font-size: 10px; word-break: break-all;">\${wallet.substring(0,6)}...\${wallet.substring(wallet.length-4)}</div>
-                    <div style="font-size: 12px; margin: 5px 0;">\${player.solAmount.toFixed(2)} SOL</div>
-                    <div class="player-health">
-                        <div class="player-health-bar" style="width: \${player.hp}%"></div>
-                    </div>
-                \`;
-                playersContainer.appendChild(playerCard);
-            });
+            if (data.players) {
+                Object.entries(data.players).forEach(([wallet, player]) => {
+                    const playerCard = document.createElement('div');
+                    playerCard.className = 'player-card';
+                    playerCard.innerHTML = \`
+                        <div class="player-avatar">👤</div>
+                        <div style="font-size: 10px; word-break: break-all;">\${wallet.substring(0,6)}...\${wallet.substring(wallet.length-4)}</div>
+                        <div style="font-size: 12px; margin: 5px 0;">\${player.solAmount.toFixed(2)} SOL</div>
+                        <div class="player-health">
+                            <div class="player-health-bar" style="width: \${player.hp}%"></div>
+                        </div>
+                    \`;
+                    playersContainer.appendChild(playerCard);
+                });
+            }
             
-            // Update Hall of Fame
             const hofContainer = document.querySelector('#hall-of-fame');
             hofContainer.innerHTML = '';
-            data.hallOfFame.forEach((entry, wallet) => {
-                const hofEntry = document.createElement('div');
-                hofEntry.className = 'hof-entry';
-                hofEntry.innerHTML = \`
-                    <div style="font-weight: bold;">🏆 \${wallet.substring(0,8)}...</div>
-                    <div>Amount: \${entry.solAmount.toFixed(2)} SOL</div>
-                    <div>USD: $\${entry.usdValue.toFixed(2)}</div>
-                    <div style="font-size: 10px; opacity: 0.7;">\${new Date(entry.timestamp).toLocaleDateString()}</div>
-                \`;
-                hofContainer.appendChild(hofEntry);
-            });
+            if (data.hallOfFame) {
+                Object.entries(data.hallOfFame).forEach(([wallet, entry]) => {
+                    const hofEntry = document.createElement('div');
+                    hofEntry.className = 'hof-entry';
+                    hofEntry.innerHTML = \`
+                        <div style="font-weight: bold;">🏆 \${wallet.substring(0,8)}...</div>
+                        <div>Amount: \${entry.solAmount.toFixed(2)} SOL</div>
+                        <div>USD: $\${entry.usdValue.toFixed(2)}</div>
+                        <div style="font-size: 10px; opacity: 0.7;">\${new Date(entry.timestamp).toLocaleDateString()}</div>
+                    \`;
+                    hofContainer.appendChild(hofEntry);
+                });
+            }
         }
         
         function addBattleLog(message, type) {
@@ -239,67 +255,31 @@ function createGameInterface() {
             entry.textContent = \`[\${new Date().toLocaleTimeString()}] \${message}\`;
             log.appendChild(entry);
             log.scrollTop = log.scrollHeight;
-            
-            // Keep only last 50 entries
             const entries = log.querySelectorAll('.log-entry');
-            if (entries.length > 50) {
-                entries[0].remove();
+            if (entries.length > 50) entries[0].remove();
+        }
+        
+        async function fetchGameState() {
+            try {
+                const response = await fetch('/api/game-state');
+                const data = await response.json();
+                updateGameState(data);
+            } catch (error) {
+                console.error('Error fetching game state:', error);
             }
         }
         
-        function createAttackAnimation(x, y, damage) {
-            const anim = document.createElement('div');
-            anim.className = 'attack-animation';
-            anim.textContent = \`-\${damage}\`;
-            anim.style.left = x + 'px';
-            anim.style.top = y + 'px';
-            document.body.appendChild(anim);
-            setTimeout(() => anim.remove(), 1000);
-        }
+        setInterval(fetchGameState, 2000);
+        fetchGameState();
         
-        // WebSocket connection for real-time updates
-        const ws = new WebSocket('ws://localhost:8080'); // You'd need to set up a WebSocket server
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            updateGameState(data);
-            
-            if (data.newLog) {
-                addBattleLog(data.newLog.message, data.newLog.type);
-                
-                if (data.newLog.type === 'buy' && data.newLog.damage) {
-                    createAttackAnimation(400, 300, data.newLog.damage);
-                }
-            }
-        };
-        
-        // Simulate some initial data for demo
-        setTimeout(() => {
-            updateGameState({
-                boss: { hp: 85, maxHp: 100, power: 50 },
-                totalVolume: { buys: 15.67, sells: 8.23 },
-                ath: { wallet: 'HxY8s3...aBc9', solAmount: 2.5, usdValue: 450 },
-                players: new Map([
-                    ['HxY8s3...aBc9', { solAmount: 2.5, hp: 100 }],
-                    ['KwT5r2...XzY7', { solAmount: 1.2, hp: 85 }],
-                    ['MnP9s1...QwE3', { solAmount: 0.8, hp: 92 }]
-                ]),
-                hallOfFame: new Map([
-                    ['HxY8s3...aBc9', { solAmount: 2.5, usdValue: 450, timestamp: Date.now() }]
-                ]),
-                totalTxs: 47
-            });
-            
-            addBattleLog('👤 Player HxY8s3... bought 2.5 SOL! Boss takes -15 damage!', 'buy');
-            addBattleLog('🐻 Bear Boss attacks back! All players take -8 damage!', 'boss');
-            addBattleLog('🏆 New ATH Champion: HxY8s3... with 2.5 SOL purchase!', 'ath');
-        }, 1000);
+        setInterval(() => {
+            addBattleLog('🔄 Live updates active...', 'boss');
+        }, 30000);
     </script>
 </body>
-</html>
-`;
+</html>`;
 }
 
-// Enhanced game logic
 async function analyzeTransaction(tx, signature) {
   if (!tx || !tx.meta || tx.meta.err) return null;
   
@@ -307,19 +287,17 @@ async function analyzeTransaction(tx, signature) {
   const accountKeys = tx.transaction.message.staticAccountKeys || [];
   if (accountKeys.length === 0) return null;
 
-  // Calculate SOL spent/received
   const preBalance = meta.preBalances[0] / LAMPORTS_PER_SOL;
   const postBalance = meta.postBalances[0] / LAMPORTS_PER_SOL;
   const fee = meta.fee / LAMPORTS_PER_SOL;
   const netChange = preBalance - postBalance - fee;
   
-  if (Math.abs(netChange) < 0.01) return null; // Ignore tiny transactions
+  if (Math.abs(netChange) < 0.01) return null;
 
   const isBuy = netChange > 0;
   const solAmount = Math.abs(netChange);
   const walletAddress = accountKeys[0].toBase58();
 
-  // Update player stats
   if (!PLAYERS.has(walletAddress)) {
     PLAYERS.set(walletAddress, {
       solAmount: 0,
@@ -331,16 +309,13 @@ async function analyzeTransaction(tx, signature) {
   }
 
   const player = PLAYERS.get(walletAddress);
+  player.lastAction = Date.now();
   
   if (isBuy) {
     player.solAmount += solAmount;
     player.totalBuys += solAmount;
     TOTAL_VOLUME.buys += solAmount;
-    
-    // Players heal when buying
     player.hp = Math.min(100, player.hp + 5);
-    
-    // Boss takes damage from buys
     const damage = Math.min(solAmount * 2, 20);
     BOSS.hp = Math.max(0, BOSS.hp - damage);
     
@@ -356,20 +331,9 @@ async function analyzeTransaction(tx, signature) {
     player.solAmount = Math.max(0, player.solAmount - solAmount);
     player.totalSells += solAmount;
     TOTAL_VOLUME.sells += solAmount;
-    
-    // Players take damage when selling
     player.hp = Math.max(0, player.hp - 10);
-    
-    // Boss gains power from sells
     BOSS.power = Math.min(100, BOSS.power + solAmount);
     BOSS.hp = Math.min(BOSS.maxHp, BOSS.hp + solAmount);
-    
-    // Boss attacks back periodically
-    const now = Date.now();
-    if (now - BOSS.lastAttack > 30000) { // Every 30 seconds
-      BOSS.lastAttack = now;
-      attackAllPlayers();
-    }
     
     return {
       type: 'sell', 
@@ -390,7 +354,7 @@ function attackAllPlayers() {
   return {
     type: 'boss_attack',
     damage,
-    message: `🐻 Bear Boss attacks all players for ${damage} damage!`
+    message: \`🐻 Bear Boss attacks all players for \${damage} damage!\`
   };
 }
 
@@ -410,32 +374,35 @@ async function scanTransactions(maxTx = 50) {
         const analysis = await analyzeTransaction(tx, siginfo.signature);
         if (analysis) {
           transactions.push(analysis);
+          TOTAL_TRANSACTIONS++;
           
-          // Check for ATH potential
           if (analysis.type === 'buy' && analysis.solAmount >= ATH_BUY_MIN_SOL) {
-            const jupRes = await fetch(`https://lite-api.jup.ag/price/v3?ids=${PUMP_TOKEN_MINT}`);
-            const jupData = await jupRes.json();
-            const tokenPrice = jupData[PUMP_TOKEN_MINT]?.usdPrice || 0;
-            const usdValue = analysis.solAmount * tokenPrice;
-            
-            if (usdValue > ATH.usdValue) {
-              ATH = {
-                wallet: analysis.wallet,
-                solAmount: analysis.solAmount,
-                usdValue: usdValue,
-                signature: analysis.signature,
-                timestamp: analysis.timestamp
-              };
+            try {
+              const jupRes = await fetch(\`https://api.jup.ag/price/v1?ids=\${PUMP_TOKEN_MINT}\`);
+              const jupData = await jupRes.json();
+              const tokenPrice = jupData.data[PUMP_TOKEN_MINT]?.price || 0;
+              const usdValue = analysis.solAmount * tokenPrice;
               
-              // Add to Hall of Fame if volume threshold met
-              if (TOTAL_VOLUME.buys + TOTAL_VOLUME.sells >= VOLUME_THRESHOLD) {
-                HALL_OF_FAME.set(analysis.wallet, {
+              if (usdValue > ATH.usdValue) {
+                ATH = {
+                  wallet: analysis.wallet,
                   solAmount: analysis.solAmount,
                   usdValue: usdValue,
-                  timestamp: analysis.timestamp,
-                  signature: analysis.signature
-                });
+                  signature: analysis.signature,
+                  timestamp: analysis.timestamp
+                };
+                
+                if (TOTAL_VOLUME.buys + TOTAL_VOLUME.sells >= VOLUME_THRESHOLD) {
+                  HALL_OF_FAME.set(analysis.wallet, {
+                    solAmount: analysis.solAmount,
+                    usdValue: usdValue,
+                    timestamp: analysis.timestamp,
+                    signature: analysis.signature
+                  });
+                }
               }
+            } catch (priceError) {
+              console.error('Error fetching price:', priceError);
             }
           }
         }
@@ -450,25 +417,6 @@ async function scanTransactions(maxTx = 50) {
     return [];
   }
 }
-
-// Server setup for web interface
-import http from 'http';
-import fs from 'fs';
-import path from 'path';
-
-const server = http.createServer((req, res) => {
-  if (req.url === '/' || req.url === '/index.html') {
-    res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end(createGameInterface());
-  } else {
-    res.writeHead(404);
-    res.end('Not found');
-  }
-});
-
-server.listen(3000, () => {
-  console.log('🎮 Game server running at http://localhost:3000');
-});
 
 async function collectCreatorFeesIfNeeded() {
   try {
@@ -508,7 +456,7 @@ async function sendATHReward(athWallet, amountSol) {
       })
     );
     const sig = await creatorConnection.sendTransaction(tx, [wallet]);
-    console.log(`🎁 Sent ${amountSol} SOL to ATH wallet: ${athWallet} | TX: ${sig}`);
+    console.log(\`🎁 Sent \${amountSol} SOL to ATH wallet: \${athWallet} | TX: \${sig}\`);
     return sig;
   } catch (e) {
     console.error("❌ Failed to send ATH reward:", e);
@@ -517,42 +465,39 @@ async function sendATHReward(athWallet, amountSol) {
 }
 
 async function mainLoop() {
-  let totalTransactions = 0;
-  
   while (true) {
     try {
-      // 1. Check/collect creator fees
       const collectedSol = await collectCreatorFeesIfNeeded();
-      
-      // 2. Scan and process transactions
       const transactions = await scanTransactions(50);
-      totalTransactions += transactions.length;
       
-      // 3. Update game state and log actions
       transactions.forEach(tx => {
         if (tx.type === 'buy') {
-          console.log(`🎯 BUY: ${tx.wallet.substring(0,8)}... bought ${tx.solAmount.toFixed(2)} SOL | Boss HP: ${BOSS.hp.toFixed(1)}`);
+          console.log(\`🎯 BUY: \${tx.wallet.substring(0,8)}... bought \${tx.solAmount.toFixed(2)} SOL | Boss HP: \${BOSS.hp.toFixed(1)}\`);
         } else if (tx.type === 'sell') {
-          console.log(`💔 SELL: ${tx.wallet.substring(0,8)}... sold ${tx.solAmount.toFixed(2)} SOL | Boss Power: ${BOSS.power.toFixed(1)}`);
+          console.log(\`💔 SELL: \${tx.wallet.substring(0,8)}... sold \${tx.solAmount.toFixed(2)} SOL | Boss Power: \${BOSS.power.toFixed(1)}\`);
         }
       });
       
-      // 4. If fees were collected and ATH exists, send 40% of collected to ATH
+      const now = Date.now();
+      if (now - BOSS.lastAttack > 30000) {
+        BOSS.lastAttack = now;
+        const attack = attackAllPlayers();
+        console.log(\`🐻 \${attack.message}\`);
+      }
+      
       if (collectedSol > 0 && ATH.wallet) {
         const rewardSol = collectedSol * 0.4;
         await sendATHReward(ATH.wallet, rewardSol);
       }
       
-      // 5. Clean up inactive players (older than 1 hour)
-      const now = Date.now();
+      const currentTime = Date.now();
       PLAYERS.forEach((player, wallet) => {
-        if (now - player.lastAction > 3600000) { // 1 hour
+        if (currentTime - player.lastAction > 3600000) {
           PLAYERS.delete(wallet);
         }
       });
       
-      // 6. Log current game state
-      console.log(`🎮 Game State: ${PLAYERS.size} active players | Boss HP: ${BOSS.hp.toFixed(1)} | Volume: ${(TOTAL_VOLUME.buys + TOTAL_VOLUME.sells).toFixed(2)} SOL`);
+      console.log(\`🎮 Game State: \${PLAYERS.size} active players | Boss HP: \${BOSS.hp.toFixed(1)} | Volume: \${(TOTAL_VOLUME.buys + TOTAL_VOLUME.sells).toFixed(2)} SOL\`);
       
     } catch (e) {
       console.error("Loop error:", e);
@@ -562,7 +507,9 @@ async function mainLoop() {
   }
 }
 
-// Start the game
-console.log("🚀 Starting PUMP MMORPG Game...");
-console.log("🎮 Game interface available at: http://localhost:3000");
+app.listen(PORT, () => {
+  console.log(\`🚀 PUMP MMORPG Game running on port \${PORT}\`);
+  console.log(\`🎮 Game interface available at: http://localhost:\${PORT}\`);
+});
+
 mainLoop();
