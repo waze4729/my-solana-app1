@@ -5,7 +5,7 @@ import http from 'http';
 import fetch from 'node-fetch';
 
 const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
-const TOKEN_MINT = "EbLBfH6LByi2DNkoL8WNVrcRbKC12oJptNSuxohmfNh";
+const TOKEN_MINT = "Gupf4N7c9WWr87naP2pC2m5JCwrs8QFBRB6yC1Xomxr7";
 const POLL_INTERVAL_MS = 5000;
 const ATH_BUY_MIN_SOL = 0.1;
 
@@ -28,6 +28,9 @@ let totalDamageDealt = 0;
 let totalBossKills = 0;
 let currentBossName = "PRICE DRAGON";
 let bossPhase = "NORMAL";
+
+// PERMANENT ATH PLAYER STORAGE
+let permanentAthPlayers = new Map(); // wallet -> { bestPurchase, character }
 
 const processedTransactions = new Set();
 const recentHolders = new Set();
@@ -54,9 +57,16 @@ function broadcastUpdate() {
 function getCurrentGameData() {
   const lastPrice = priceHistory.length > 0 ? priceHistory[priceHistory.length - 1] : { price: 0, priceChange24h: 0 };
   
-  const athChad = athPurchases
-    .filter(p => p.isATHPurchase && p.solAmount >= ATH_BUY_MIN_SOL)
-    .sort((a, b) => b.marketPrice - a.marketPrice)[0] || null;
+  // Get ALL ATH players (permanent storage)
+  const allAthPlayers = Array.from(permanentAthPlayers.entries())
+    .map(([wallet, data]) => ({
+      wallet,
+      bestPurchase: data.bestPurchase,
+      character: data.character
+    }))
+    .sort((a, b) => b.bestPurchase.marketPrice - a.bestPurchase.marketPrice);
+
+  const athChad = allAthPlayers.length > 0 ? allAthPlayers[0] : null;
 
   const recentAthPurchases = athPurchases
     .filter(p => p.isATHPurchase)
@@ -90,7 +100,12 @@ function getCurrentGameData() {
     
     playerCharacters: Object.fromEntries(playerCharacters),
     topPlayers,
-    gameHistory: gameHistory.slice(-50), // Last 50 events
+    gameHistory: gameHistory.slice(-50),
+    
+    // PERMANENT ATH DATA
+    permanentAthPlayers: allAthPlayers,
+    athChad,
+    recentAthPurchases,
     
     stats: {
       totalATHPurchases: athPurchases.filter(p => p.isATHPurchase).length,
@@ -98,11 +113,9 @@ function getCurrentGameData() {
       trackedTransactions: fullTransactions.length,
       lastPrice: lastPrice.price || 0,
       priceChange24h: lastPrice.priceChange24h || 0,
-      activePlayers: playerCharacters.size
-    },
-    
-    athChad,
-    recentAthPurchases
+      activePlayers: playerCharacters.size,
+      permanentAthCount: permanentAthPlayers.size
+    }
   };
 }
 
@@ -163,7 +176,7 @@ function getRandomClass() {
 function calculateDamage(purchase, currentPrice) {
   const baseDamage = purchase.solAmount * 10;
   const priceMultiplier = currentPrice > 0.0001 ? Math.log10(currentPrice * 10000) : 1;
-  const randomCrit = Math.random() < 0.1 ? 2 : 1; // 10% crit chance
+  const randomCrit = Math.random() < 0.1 ? 2 : 1;
   
   return Math.floor(baseDamage * priceMultiplier * randomCrit);
 }
@@ -171,24 +184,23 @@ function calculateDamage(purchase, currentPrice) {
 function bossAttack() {
   const damage = Math.floor(bossPower * (0.8 + Math.random() * 0.4));
   
-  // Randomly select a player to attack
   const players = Array.from(playerCharacters.values());
   if (players.length > 0) {
     const target = players[Math.floor(Math.random() * players.length)];
     target.health -= damage;
     
     if (target.health <= 0) {
-      target.health = target.maxHealth; // Respawn
+      target.health = target.maxHealth;
       gameHistory.push({
         type: "BOSS_KILL",
-        message: `💀 ${currentBossName} defeated ${target.wallet.slice(0, 8)}...!`,
+        message: `💀 ${currentBossName} defeated ${target.wallet}!`,
         timestamp: Date.now()
       });
     }
     
     gameHistory.push({
       type: "BOSS_ATTACK",
-      message: `⚡ ${currentBossName} hits ${target.wallet.slice(0, 8)}... for ${damage} damage!`,
+      message: `⚡ ${currentBossName} hits ${target.wallet} for ${damage} damage!`,
       timestamp: Date.now()
     });
   }
@@ -227,14 +239,12 @@ function checkBossDefeat() {
       timestamp: Date.now()
     });
     
-    // Level up boss for next fight
     bossLevel++;
     bossMaxHealth = 1000 + (bossLevel * 200);
     bossHealth = bossMaxHealth;
     bossPower = 100 + (bossLevel * 20);
     bossPhase = "NORMAL";
     
-    // Generate new boss name based on price movement
     const priceChange = priceHistory.length > 1 ? 
       priceHistory[priceHistory.length - 1].price - priceHistory[0].price : 0;
     
@@ -244,7 +254,6 @@ function checkBossDefeat() {
       currentBossName = `BEAR MARKET BEAST Lv${bossLevel}`;
     }
     
-    // Reward all players
     Array.from(playerCharacters.values()).forEach(player => {
       player.level++;
       player.maxHealth += 20;
@@ -259,190 +268,136 @@ function checkBossDefeat() {
   return false;
 }
 
+// FIXED PRICE FETCHING WITH BETTER ACCURACY
 async function fetchTokenPrice(mintAddress) {
   try {
-    const res = await fetch(`https://lite-api.jup.ag/price/v3?ids=${mintAddress}`);
-    if (!res.ok) {
-      logToConsole(`Failed to fetch price: HTTP ${res.status}`, 'error');
-      return null;
-    }
-    const data = await res.json();
-    if (data[mintAddress]) {
-      const tokenData = data[mintAddress];
-      const price = tokenData.usdPrice || 0;
-      const isNewATH = price > allTimeHighPrice;
-      
-      if (isNewATH) {
-        allTimeHighPrice = price;
-        logToConsole(`🚀 NEW ALL-TIME HIGH: $${price.toFixed(8)}`, 'success');
-        
-        // Boss gets stronger at ATH
-        bossPower += 10;
-        gameHistory.push({
-          type: "ATH_REACHED",
-          message: `📈 ATH REACHED! ${currentBossName} grows stronger!`,
-          timestamp: Date.now()
-        });
+    // Try multiple price sources for accuracy
+    const sources = [
+      `https://api.dexscreener.com/latest/dex/tokens/${mintAddress}`,
+      `https://price.jup.ag/v4/price?ids=${mintAddress}`,
+      `https://api.geckoterminal.com/api/v2/simple/networks/solana/token_price/${mintAddress}`
+    ];
+    
+    let price = 0;
+    let priceChange24h = 0;
+    
+    for (const source of sources) {
+      try {
+        const res = await fetch(source);
+        if (res.ok) {
+          const data = await res.json();
+          
+          // DexScreener
+          if (source.includes('dexscreener')) {
+            if (data.pairs && data.pairs.length > 0) {
+              price = parseFloat(data.pairs[0].priceUsd) || 0;
+              priceChange24h = parseFloat(data.pairs[0].priceChange.h24) || 0;
+              if (price > 0) break;
+            }
+          }
+          // Jupiter
+          else if (source.includes('jup.ag')) {
+            if (data.data && data.data[mintAddress]) {
+              price = parseFloat(data.data[mintAddress].price) || 0;
+              priceChange24h = 0; // Jupiter doesn't provide 24h change simply
+              if (price > 0) break;
+            }
+          }
+          // GeckoTerminal
+          else if (source.includes('geckoterminal')) {
+            if (data.data && data.data.attributes) {
+              price = parseFloat(data.data.attributes.token_prices[mintAddress]) || 0;
+              priceChange24h = 0;
+              if (price > 0) break;
+            }
+          }
+        }
+      } catch (e) {
+        // Try next source
+        continue;
       }
-      
-      logToConsole(`Price fetched: $${price.toFixed(8)} (24h: ${(tokenData.priceChange24h * 100).toFixed(2)}%)`, 'info');
-      broadcastUpdate();
-      return { 
-        price, 
-        timestamp: Date.now(), 
-        isNewATH,
-        blockId: tokenData.blockId,
-        decimals: tokenData.decimals,
-        priceChange24h: tokenData.priceChange24h
-      };
     }
-    return null;
+    
+    if (price === 0) {
+      // Fallback to original method
+      const res = await fetch(`https://api.jup.ag/tokens/v3/price?ids=${mintAddress}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.data && data.data[mintAddress]) {
+          price = parseFloat(data.data[mintAddress].price) || 0;
+        }
+      }
+    }
+    
+    const isNewATH = price > allTimeHighPrice;
+    if (isNewATH) {
+      allTimeHighPrice = price;
+      logToConsole(`🚀 NEW ALL-TIME HIGH: $${price.toFixed(8)}`, 'success');
+      
+      bossPower += 10;
+      gameHistory.push({
+        type: "ATH_REACHED",
+        message: `📈 ATH REACHED! ${currentBossName} grows stronger!`,
+        timestamp: Date.now()
+      });
+    }
+    
+    logToConsole(`Price fetched: $${price.toFixed(8)} (24h: ${priceChange24h.toFixed(2)}%)`, 'info');
+    broadcastUpdate();
+    
+    return { 
+      price, 
+      timestamp: Date.now(), 
+      isNewATH,
+      priceChange24h
+    };
+    
   } catch (e) {
     logToConsole(`Error fetching token price: ${e.message}`, 'error');
     return null;
   }
 }
 
-async function getFullTransactionDetails(signature) {
-  try {
-    const tx = await connection.getTransaction(signature, {
-      commitment: "confirmed",
-      maxSupportedTransactionVersion: 0
-    });
-    if (!tx) return null;
-    const meta = tx.meta || {};
-    const transaction = tx.transaction || {};
-    const message = transaction.message || {};
-    const accountKeys = message.accountKeys || [];
-    const fullDetails = {
-      signature: signature,
-      slot: tx.slot || 0,
-      blockTime: tx.blockTime ? new Date(tx.blockTime * 1000).toISOString() : null,
-      timestamp: tx.blockTime ? tx.blockTime * 1000 : null,
-      fee: meta.fee ? meta.fee / LAMPORTS_PER_SOL : 0,
-      status: meta.err ? 'failed' : 'success',
-      error: meta.err || null,
-      accounts: accountKeys.map((account, index) => ({
-        pubkey: account?.pubkey?.toString() || 'unknown',
-        signer: account?.signer || false,
-        writable: account?.writable || false,
-        preBalance: meta.preBalances?.[index] ? meta.preBalances[index] / LAMPORTS_PER_SOL : 0,
-        postBalance: meta.postBalances?.[index] ? meta.postBalances[index] / LAMPORTS_PER_SOL : 0,
-        balanceChange: meta.preBalances?.[index] && meta.postBalances?.[index] 
-          ? (meta.postBalances[index] - meta.preBalances[index]) / LAMPORTS_PER_SOL 
-          : 0
-      })),
-    };
-    return fullDetails;
-  } catch (e) {
-    logToConsole(`Error getting transaction details: ${e.message}`, 'error');
-    return null;
-  }
-}
-
-function calculateSolSpent(tx) {
-  try {
-    if (!tx?.meta || !tx.transaction) return { solSpent: 0, buyer: null };
-    const meta = tx.meta;
-    const accountKeys = tx.transaction.message.accountKeys || [];
-    const feePayerIndex = 0;
-    let solSpent = 0;
-    let buyer = accountKeys[feePayerIndex]?.pubkey?.toString() || null;
-    if (meta.preBalances && meta.postBalances && meta.preBalances.length > feePayerIndex) {
-      const preBalance = meta.preBalances[feePayerIndex] / LAMPORTS_PER_SOL;
-      const postBalance = meta.postBalances[feePayerIndex] / LAMPORTS_PER_SOL;
-      const fee = meta.fee / LAMPORTS_PER_SOL;
-      solSpent = Math.max(0, preBalance - postBalance - fee);
-    }
-    if (solSpent === 0) {
-      for (let i = 0; i < accountKeys.length; i++) {
-        if (meta.preBalances?.[i] && meta.postBalances?.[i]) {
-          const balanceChange = (meta.postBalances[i] - meta.preBalances[i]) / LAMPORTS_PER_SOL;
-          if (balanceChange < -0.001) {
-            solSpent = Math.abs(balanceChange);
-            buyer = accountKeys[i]?.pubkey?.toString() || buyer;
-            break;
-          }
-        }
-      }
-    }
-    return { solSpent, buyer };
-  } catch (e) {
-    logToConsole(`Error calculating SOL spent: ${e.message}`, 'error');
-    return { solSpent: 0, buyer: null };
-  }
-}
-
-async function monitorNewTokenTransactions() {
-  try {
-    const mintPublicKey = new PublicKey(TOKEN_MINT);
-    const signatures = await connection.getSignaturesForAddress(mintPublicKey, { limit: 10 });
-    const newPurchases = [];
-    logToConsole(`Monitoring ${signatures.length} new signatures`, 'info');
-    for (const sig of signatures) {
-      if (processedTransactions.has(sig.signature)) continue;
-      try {
-        const tx = await connection.getTransaction(sig.signature, {
-          commitment: "confirmed",
-          maxSupportedTransactionVersion: 0
-        });
-        if (!tx || !tx.meta || tx.meta.err) {
-          processedTransactions.add(sig.signature);
-          continue;
-        }
-        const txTime = tx.blockTime ? tx.blockTime * 1000 : 0;
-        const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-        if (txTime < fiveMinutesAgo) {
-          processedTransactions.add(sig.signature);
-          continue;
-        }
-        const fullTxDetails = await getFullTransactionDetails(sig.signature);
-        if (fullTxDetails) fullTransactions.push(fullTxDetails);
-        const purchase = await analyzeTokenPurchase(tx, sig.signature, fullTxDetails);
-        if (purchase) {
-          processedTransactions.add(sig.signature);
-          newPurchases.push(purchase);
-          logToConsole(`📊 New purchase detected: ${sig.signature}`, 'success');
-        } else {
-          processedTransactions.add(sig.signature);
-        }
-        await new Promise(r => setTimeout(r, 500));
-      } catch (e) {
-        logToConsole(`Error processing transaction ${sig.signature}: ${e.message}`, 'error');
-        processedTransactions.add(sig.signature);
-      }
-    }
-    if (newPurchases.length > 0) broadcastUpdate();
-    return newPurchases;
-  } catch (e) {
-    logToConsole(`Error monitoring transactions: ${e.message}`, 'error');
-    return [];
-  }
-}
-
+// FIXED TRANSACTION ANALYSIS WITH BETTER SOL CALCULATION
 async function analyzeTokenPurchase(tx, signature, fullTxDetails = null) {
   try {
     if (!tx?.meta || !tx?.transaction) return null;
+    
     const postTokenBalances = tx.meta?.postTokenBalances || [];
+    const preTokenBalances = tx.meta?.preTokenBalances || [];
+    
+    // Find token transfers for our mint
     const tokenTransfers = postTokenBalances.filter(balance =>
       balance?.mint === TOKEN_MINT &&
       balance?.uiTokenAmount?.uiAmount > 0
     );
+    
     if (tokenTransfers.length === 0) return null;
+    
     const { solSpent, buyer } = calculateSolSpent(tx);
     const accountKeys = tx.transaction.message?.accountKeys || [];
-    const accountAddresses = accountKeys.map(account => ({
-      pubkey: account?.pubkey?.toString() || 'unknown',
-      signer: account?.signer || false,
-      writable: account?.writable || false
-    }));
+    
     const purchases = [];
+    
     for (const transfer of tokenTransfers) {
       const wallet = transfer.owner || 'unknown';
-      const tokenAmount = transfer.uiTokenAmount?.uiAmount || 0;
       if (recentHolders.has(wallet)) continue;
+      
+      // Calculate exact token amount received
+      const preBalance = preTokenBalances.find(b => 
+        b.mint === TOKEN_MINT && b.owner === wallet
+      )?.uiTokenAmount?.uiAmount || 0;
+      
+      const postBalance = transfer.uiTokenAmount?.uiAmount || 0;
+      const tokenAmount = postBalance - preBalance;
+      
+      if (tokenAmount <= 0) continue;
+      
       let pricePerToken = 0;
-      if (solSpent > 0 && tokenAmount > 0) pricePerToken = solSpent / tokenAmount;
+      if (solSpent > 0 && tokenAmount > 0) {
+        pricePerToken = solSpent / tokenAmount;
+      }
+      
       const purchaseDetails = {
         wallet: wallet,
         buyerAddress: buyer,
@@ -454,18 +409,173 @@ async function analyzeTokenPurchase(tx, signature, fullTxDetails = null) {
         pricePerToken: pricePerToken,
         marketPrice: 0,
         isATHPurchase: false,
-        allAddresses: accountAddresses,
         slot: tx.slot || 0,
         fee: tx.meta.fee ? tx.meta.fee / LAMPORTS_PER_SOL : 0,
         computeUnits: tx.meta.computeUnitsConsumed || null
       };
+      
       if (fullTxDetails) purchaseDetails.fullTransaction = fullTxDetails;
       purchases.push(purchaseDetails);
       recentHolders.add(wallet);
     }
+    
     return purchases.length > 0 ? purchases : null;
+    
   } catch (e) {
     logToConsole(`Error analyzing purchase: ${e.message}`, 'error');
+    return null;
+  }
+}
+
+// IMPROVED SOL SPENT CALCULATION
+function calculateSolSpent(tx) {
+  try {
+    if (!tx?.meta || !tx.transaction) return { solSpent: 0, buyer: null };
+    
+    const meta = tx.meta;
+    const accountKeys = tx.transaction.message.accountKeys || [];
+    
+    // Method 1: Check fee payer balance change (most accurate for buys)
+    const feePayerIndex = 0;
+    let solSpent = 0;
+    let buyer = accountKeys[feePayerIndex]?.pubkey?.toString() || null;
+    
+    if (meta.preBalances && meta.postBalances && meta.preBalances.length > feePayerIndex) {
+      const preBalance = meta.preBalances[feePayerIndex] / LAMPORTS_PER_SOL;
+      const postBalance = meta.postBalances[feePayerIndex] / LAMPORTS_PER_SOL;
+      const fee = meta.fee / LAMPORTS_PER_SOL;
+      
+      // SOL spent = balance decrease minus fee
+      solSpent = Math.max(0, preBalance - postBalance - fee);
+    }
+    
+    // Method 2: If no SOL spent detected, check all accounts for significant SOL outflows
+    if (solSpent < 0.001) {
+      for (let i = 0; i < accountKeys.length; i++) {
+        if (meta.preBalances?.[i] && meta.postBalances?.[i]) {
+          const balanceChange = (meta.postBalances[i] - meta.preBalances[i]) / LAMPORTS_PER_SOL;
+          
+          // Significant SOL outflow (buy)
+          if (balanceChange < -0.001) {
+            solSpent = Math.abs(balanceChange);
+            buyer = accountKeys[i]?.pubkey?.toString() || buyer;
+            break;
+          }
+        }
+      }
+    }
+    
+    return { solSpent, buyer };
+    
+  } catch (e) {
+    logToConsole(`Error calculating SOL spent: ${e.message}`, 'error');
+    return { solSpent: 0, buyer: null };
+  }
+}
+
+// PERMANENT ATH PLAYER STORAGE
+function updatePermanentAthPlayers(purchase) {
+  if (!purchase.isATHPurchase) return;
+  
+  const wallet = purchase.wallet;
+  const existing = permanentAthPlayers.get(wallet);
+  
+  if (!existing || purchase.marketPrice > existing.bestPurchase.marketPrice) {
+    // Get or create character
+    let character = playerCharacters.get(wallet);
+    if (!character) {
+      character = createPlayerCharacter(wallet, purchase);
+    }
+    
+    permanentAthPlayers.set(wallet, {
+      bestPurchase: purchase,
+      character: character,
+      firstSeen: existing?.firstSeen || new Date().toISOString(),
+      lastUpdated: new Date().toISOString()
+    });
+    
+    logToConsole(`🏆 ${wallet} added to PERMANENT ATH Hall of Fame at $${purchase.marketPrice.toFixed(8)}`, 'success');
+  }
+}
+
+async function monitorNewTokenTransactions() {
+  try {
+    const mintPublicKey = new PublicKey(TOKEN_MINT);
+    const signatures = await connection.getSignaturesForAddress(mintPublicKey, { limit: 15 });
+    const newPurchases = [];
+    
+    for (const sig of signatures) {
+      if (processedTransactions.has(sig.signature)) continue;
+      
+      try {
+        const tx = await connection.getTransaction(sig.signature, {
+          commitment: "confirmed",
+          maxSupportedTransactionVersion: 0
+        });
+        
+        if (!tx || !tx.meta || tx.meta.err) {
+          processedTransactions.add(sig.signature);
+          continue;
+        }
+        
+        const txTime = tx.blockTime ? tx.blockTime * 1000 : 0;
+        const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
+        
+        if (txTime < tenMinutesAgo) {
+          processedTransactions.add(sig.signature);
+          continue;
+        }
+        
+        const fullTxDetails = await getFullTransactionDetails(sig.signature);
+        if (fullTxDetails) fullTransactions.push(fullTxDetails);
+        
+        const purchase = await analyzeTokenPurchase(tx, sig.signature, fullTxDetails);
+        if (purchase) {
+          processedTransactions.add(sig.signature);
+          newPurchases.push(purchase);
+        } else {
+          processedTransactions.add(sig.signature);
+        }
+        
+        await new Promise(r => setTimeout(r, 300));
+        
+      } catch (e) {
+        logToConsole(`Error processing transaction ${sig.signature}: ${e.message}`, 'error');
+        processedTransactions.add(sig.signature);
+      }
+    }
+    
+    if (newPurchases.length > 0) {
+      logToConsole(`📊 New purchases detected: ${newPurchases.length} transactions`, 'success');
+      broadcastUpdate();
+    }
+    
+    return newPurchases;
+    
+  } catch (e) {
+    logToConsole(`Error monitoring transactions: ${e.message}`, 'error');
+    return [];
+  }
+}
+
+async function getFullTransactionDetails(signature) {
+  try {
+    const tx = await connection.getTransaction(signature, {
+      commitment: "confirmed",
+      maxSupportedTransactionVersion: 0
+    });
+    if (!tx) return null;
+    
+    return {
+      signature: signature,
+      slot: tx.slot || 0,
+      blockTime: tx.blockTime ? new Date(tx.blockTime * 1000).toISOString() : null,
+      timestamp: tx.blockTime ? tx.blockTime * 1000 : null,
+      fee: tx.meta.fee ? tx.meta.fee / LAMPORTS_PER_SOL : 0,
+      status: tx.meta.err ? 'failed' : 'success'
+    };
+    
+  } catch (e) {
     return null;
   }
 }
@@ -477,7 +587,7 @@ app.get("/", (req, res) => {
   <!DOCTYPE html>
   <html lang="en">
   <head>
-    <title>TOKEN MMORPG BATTLE</title>
+    <title>TOKEN MMORPG - ATH BATTLE</title>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <style>
@@ -497,19 +607,13 @@ app.get("/", (req, res) => {
         content: '';
         position: fixed;
         top: 0; left: 0; width: 100vw; height: 100vh;
-        background: repeating-linear-gradient(
-          0deg,
-          transparent,
-          transparent 2px,
-          rgba(0, 255, 65, 0.03) 2px,
-          rgba(0, 255, 65, 0.03) 4px
-        );
+        background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 255, 65, 0.03) 2px, rgba(0, 255, 65, 0.03) 4px);
         pointer-events: none;
         z-index: 999;
       }
       .game-container {
         display: grid;
-        grid-template-columns: 1fr 300px;
+        grid-template-columns: 1fr 400px;
         gap: 10px;
         padding: 10px;
         min-height: 100vh;
@@ -526,7 +630,7 @@ app.get("/", (req, res) => {
       }
       .terminal-container {
         padding: 15px;
-        background: rgba(0, 0, 0, 0.9);
+        background: rgba(0, 0, 0, 0.95);
         border: 2px solid #00ff41;
         box-shadow: 0 0 20px #00ff4130, inset 0 0 20px #00ff4110;
       }
@@ -597,6 +701,13 @@ app.get("/", (req, res) => {
         margin: 5px 0;
         border-radius: 3px;
       }
+      .ath-player-card {
+        background: rgba(255, 215, 0, 0.1);
+        border: 2px solid #ffd700;
+        padding: 10px;
+        margin: 8px 0;
+        border-radius: 3px;
+      }
       .player-health-bar {
         width: 100%;
         height: 8px;
@@ -626,6 +737,7 @@ app.get("/", (req, res) => {
         margin: 3px 0;
         border-left: 3px solid;
         background: rgba(0, 0, 0, 0.5);
+        font-size: 10px;
       }
       .event-boss { border-color: #ff4444; }
       .event-player { border-color: #00ff41; }
@@ -636,6 +748,13 @@ app.get("/", (req, res) => {
         background: rgba(0, 0, 0, 0.3);
         border-left: 2px solid #00ff41;
         font-size: 10px;
+        word-break: break-all;
+      }
+      .full-address {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 9px;
+        color: #00ffff;
+        margin: 2px 0;
       }
       .console-section {
         background: rgba(0, 0, 0, 0.8);
@@ -668,9 +787,28 @@ app.get("/", (req, res) => {
       .status-disconnected { color: #ff6b6b; }
       .blink { animation: blink 1s infinite; }
       @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
-      @media (max-width: 1024px) {
-        .game-container { grid-template-columns: 1fr; }
-        .sidebar { order: -1; }
+      .tab-container {
+        display: flex;
+        border-bottom: 1px solid #00ff41;
+        margin-bottom: 10px;
+      }
+      .tab {
+        padding: 5px 10px;
+        cursor: pointer;
+        border: 1px solid #00ff41;
+        border-bottom: none;
+        margin-right: 5px;
+        background: rgba(0, 255, 65, 0.1);
+      }
+      .tab.active {
+        background: rgba(0, 255, 65, 0.3);
+        color: #ffff00;
+      }
+      .tab-content {
+        display: none;
+      }
+      .tab-content.active {
+        display: block;
       }
     </style>
   </head>
@@ -685,9 +823,9 @@ app.get("/", (req, res) => {
         <div class="terminal-container">
           <div class="ascii-header">
 ╔══════════════════════════════════════════════════════════════════════╗
-║                         TOKEN MMORPG BATTLE                          ║
-║                  EVERY HOLDER IS A CHARACTER                         ║
-║                   PRICE IS THE BOSS                                  ║
+║                     TOKEN MMORPG - ATH BATTLE                        ║
+║               PERMANENT ATH PLAYER HALL OF FAME                      ║
+║                 ACCURATE PRICE & SOL TRACKING                        ║
 ╚══════════════════════════════════════════════════════════════════════╝
           </div>
           
@@ -705,15 +843,15 @@ app.get("/", (req, res) => {
           <!-- GAME EVENTS -->
           <div class="section">
             <div class="section-title">⚔️ LIVE BATTLE EVENTS</div>
-            <div id="game-events" style="height: 150px; overflow-y: auto;">
-              <div class="game-event event-system">Battle begins! Players vs Price Dragon!</div>
+            <div id="game-events" style="height: 120px; overflow-y: auto;">
+              <div class="game-event event-system">Battle begins! Permanent ATH tracking active!</div>
             </div>
           </div>
 
           <!-- PLAYER CHARACTERS -->
           <div class="section">
             <div class="section-title">🎮 ACTIVE PLAYERS (Top 10 by Damage)</div>
-            <div id="players-list">
+            <div id="players-list" style="max-height: 300px; overflow-y: auto;">
               <div style="text-align: center; color: #666; padding: 10px;">
                 [NO PLAYERS YET... BUY TOKEN TO JOIN BATTLE!]<span class="blink">_</span>
               </div>
@@ -726,11 +864,11 @@ app.get("/", (req, res) => {
           <div class="section">
             <div class="section-title">💻 LIVE CONSOLE OUTPUT</div>
             <div class="console-section">
-              <div class="console-header">[server.mjs] // REAL-TIME LOG STREAM</div>
+              <div class="console-header">[server.mjs] // ACCURATE PRICE & SOL TRACKING</div>
               <div class="console-content" id="console-output">
                 <div class="console-line console-info">
                   <span class="console-timestamp">[INIT]</span> 
-                  Token MMORPG initializing...<span class="blink">_</span>
+                  Accurate ATH MMORPG initializing...<span class="blink">_</span>
                 </div>
               </div>
             </div>
@@ -739,21 +877,31 @@ app.get("/", (req, res) => {
       </div>
 
       <div class="sidebar">
-        <!-- ATH HERO -->
+        <!-- PERMANENT ATH HALL OF FAME -->
         <div class="terminal-container">
+          <div class="section">
+            <div class="section-title">🏆 PERMANENT ATH HALL OF FAME</div>
+            <div id="permanent-ath-players" style="max-height: 400px; overflow-y: auto;">
+              <div style="text-align: center; color: #666; padding: 10px; font-size: 9px;">
+                [NO ATH PLAYERS YET...]<span class="blink">_</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- ATH HERO -->
           <div id="ath-hero-section" style="display: none;">
             <div class="ath-hero">
               <div class="section-title">🎯 ULTIMATE ATH CHAD</div>
-              <div>WALLET: <span class="wallet" id="hero-wallet">---</span></div>
-              <div>PRICE PAID: <span class="price" id="hero-price">$---</span></div>
-              <div class="signature">TXN: <span id="hero-signature">---</span></div>
+              <div class="full-address" id="hero-wallet">---</div>
+              <div>PRICE: <span class="price" id="hero-price">$---</span></div>
+              <div class="full-address" id="hero-signature">---</div>
             </div>
           </div>
 
           <!-- RECENT ATH PURCHASES -->
           <div class="section">
-            <div class="section-title">📋 RECENT ATH TRANSACTIONS</div>
-            <div id="recent-purchases-list">
+            <div class="section-title">📋 RECENT ATH TRANSACTIONS (FULL INFO)</div>
+            <div id="recent-purchases-list" style="max-height: 300px; overflow-y: auto;">
               <div style="text-align: center; color: #666; padding: 10px; font-size: 9px;">
                 [NO ATH PURCHASES YET...]<span class="blink">_</span>
               </div>
@@ -762,12 +910,13 @@ app.get("/", (req, res) => {
 
           <!-- GAME STATS -->
           <div class="section">
-            <div class="section-title">📊 GAME STATISTICS</div>
-            <div id="game-stats">
+            <div class="section-title">📊 ACCURATE STATISTICS</div>
+            <div id="game-stats" style="font-size: 10px;">
               <div>Active Players: <span id="stat-players">0</span></div>
-              <div>ATH Purchases: <span id="stat-ath">0</span></div>
+              <div>Permanent ATH Players: <span id="stat-permanent-ath">0</span></div>
               <div>Current Price: $<span id="stat-price">0.00000000</span></div>
-              <div>24h Change: <span id="stat-change">0.00%</span></div>
+              <div>ATH: $<span id="stat-ath">0.00000000</span></div>
+              <div>Total Damage: <span id="stat-damage">0</span></div>
             </div>
           </div>
         </div>
@@ -803,7 +952,7 @@ app.get("/", (req, res) => {
       }
 
       function updateGameInterface(data) {
-        const { gameState, topPlayers, gameHistory, athChad, recentAthPurchases, stats } = data;
+        const { gameState, topPlayers, gameHistory, permanentAthPlayers, athChad, recentAthPurchases, stats } = data;
         
         // Update Boss Info
         document.getElementById('boss-name').textContent = \`\${gameState.bossName} Lv\${gameState.bossLevel}\`;
@@ -818,7 +967,7 @@ app.get("/", (req, res) => {
         // Update Game Events
         const eventsContainer = document.getElementById('game-events');
         eventsContainer.innerHTML = '';
-        gameHistory.slice(-10).reverse().forEach(event => {
+        gameHistory.slice(-8).reverse().forEach(event => {
           const eventDiv = document.createElement('div');
           eventDiv.className = \`game-event event-\${event.type.includes('BOSS') ? 'boss' : event.type.includes('PLAYER') ? 'player' : 'system'}\`;
           eventDiv.textContent = \`[\${new Date(event.timestamp).toLocaleTimeString()}] \${event.message}\`;
@@ -833,12 +982,30 @@ app.get("/", (req, res) => {
         } else {
           playersContainer.innerHTML = topPlayers.map(player => \`
             <div class="player-card">
-              <div><strong>#\${player.rank} \${player.wallet.slice(0, 8)}...</strong> [Lv\${player.level} \${player.class}]</div>
-              <div>\${player.title} | Damage: \${player.totalDamage}</div>
+              <div><strong>#\${player.rank} \${player.wallet}</strong></div>
+              <div>Lv\${player.level} \${player.class} | \${player.title}</div>
+              <div>Damage: \${player.totalDamage} | Power: \${player.power}</div>
               <div class="player-health-bar">
                 <div class="player-health-fill" style="width: \${(player.health / player.maxHealth) * 100}%"></div>
               </div>
-              <div style="font-size: 9px;">HP: \${player.health}/\${player.maxHealth} | Power: \${player.power}</div>
+              <div style="font-size: 9px;">HP: \${player.health}/\${player.maxHealth}</div>
+            </div>
+          \`).join('');
+        }
+        
+        // Update PERMANENT ATH Hall of Fame
+        const permanentContainer = document.getElementById('permanent-ath-players');
+        if (permanentAthPlayers.length === 0) {
+          permanentContainer.innerHTML = '<div style="text-align: center; color: #666; padding: 10px; font-size: 9px;">[NO ATH PLAYERS YET...]<span class="blink">_</span></div>';
+        } else {
+          permanentContainer.innerHTML = permanentAthPlayers.map((player, index) => \`
+            <div class="ath-player-card">
+              <div style="color: #ffd700; font-weight: bold;">#\${index + 1} ATH CHAMPION</div>
+              <div class="full-address">\${player.wallet}</div>
+              <div>Price: <strong>$\${player.bestPurchase.marketPrice.toFixed(8)}</strong></div>
+              <div>SOL: \${player.bestPurchase.solAmount.toFixed(4)} | Tokens: \${player.bestPurchase.tokenAmount.toFixed(0)}</div>
+              <div class="full-address" style="font-size: 8px;">TXN: \${player.bestPurchase.signature}</div>
+              <div style="font-size: 9px;">Class: \${player.character.class} | Lv: \${player.character.level}</div>
             </div>
           \`).join('');
         }
@@ -847,44 +1014,53 @@ app.get("/", (req, res) => {
         const heroSection = document.getElementById('ath-hero-section');
         if (athChad) {
           heroSection.style.display = 'block';
-          document.getElementById('hero-wallet').textContent = athChad.wallet.slice(0, 12) + '...';
-          document.getElementById('hero-price').textContent = \`$\${athChad.marketPrice.toFixed(8)}\`;
-          document.getElementById('hero-signature').textContent = athChad.signature.slice(0, 16) + '...';
+          document.getElementById('hero-wallet').textContent = athChad.wallet;
+          document.getElementById('hero-price').textContent = \`$\${athChad.bestPurchase.marketPrice.toFixed(8)}\`;
+          document.getElementById('hero-signature').textContent = athChad.bestPurchase.signature;
         } else {
           heroSection.style.display = 'none';
         }
         
-        // Update Recent ATH Purchases
+        // Update Recent ATH Purchases with FULL INFO
         const recentContainer = document.getElementById('recent-purchases-list');
         if (recentAthPurchases.length === 0) {
           recentContainer.innerHTML = '<div style="text-align: center; color: #666; padding: 10px; font-size: 9px;">[NO ATH PURCHASES YET...]<span class="blink">_</span></div>';
         } else {
-          recentContainer.innerHTML = recentAthPurchases.slice(0, 5).map(purchase => \`
+          recentContainer.innerHTML = recentAthPurchases.map(purchase => \`
             <div class="buyer-entry">
-              <div><strong>\${purchase.wallet.slice(0, 8)}...</strong></div>
-              <div>Price: $\${purchase.marketPrice.toFixed(8)}</div>
-              <div>SOL: \${purchase.solAmount.toFixed(4)}</div>
+              <div class="full-address"><strong>\${purchase.wallet}</strong></div>
+              <div>Price: $\${purchase.marketPrice.toFixed(8)} | SOL: \${purchase.solAmount.toFixed(6)}</div>
+              <div>Tokens: \${purchase.tokenAmount.toFixed(2)} | Time: \${secondsAgo(purchase.txTime)}</div>
+              <div class="full-address" style="font-size: 8px;">TXN: \${purchase.signature}</div>
             </div>
           \`).join('');
         }
         
         // Update Stats
         document.getElementById('stat-players').textContent = stats.activePlayers;
-        document.getElementById('stat-ath').textContent = stats.totalATHPurchases;
+        document.getElementById('stat-permanent-ath').textContent = stats.permanentAthCount;
         document.getElementById('stat-price').textContent = stats.lastPrice.toFixed(8);
-        document.getElementById('stat-change').textContent = \`\${(stats.priceChange24h * 100).toFixed(2)}%\`;
-        document.getElementById('stat-change').style.color = stats.priceChange24h >= 0 ? '#00ff41' : '#ff4444';
+        document.getElementById('stat-ath').textContent = stats.allTimeHighPrice.toFixed(8);
+        document.getElementById('stat-damage').textContent = stats.totalDamageDealt;
         
         // Update Console
         const consoleOutput = document.getElementById('console-output');
         consoleOutput.innerHTML = '';
-        data.consoleMessages.slice(-20).forEach(msg => {
+        data.consoleMessages.slice(-15).forEach(msg => {
           const line = document.createElement('div');
           line.className = \`console-line console-\${msg.type}\`;
           line.innerHTML = \`<span class="console-timestamp">[\${new Date(msg.timestamp).toLocaleTimeString()}]</span> \${msg.message}\`;
           consoleOutput.appendChild(line);
         });
         consoleOutput.scrollTop = consoleOutput.scrollHeight;
+      }
+
+      function secondsAgo(ts) {
+        const now = Date.now();
+        const diff = Math.floor((now - ts) / 1000);
+        if (diff < 60) return \`\${diff}s ago\`;
+        if (diff < 3600) return \`\${Math.floor(diff/60)}m ago\`;
+        return \`\${Math.floor(diff/3600)}h ago\`;
       }
 
       connectWebSocket();
@@ -900,32 +1076,24 @@ app.get("/api/stats", (req, res) => {
 
 const PORT = process.env.PORT || 1000;
 server.listen(PORT, () => {
-  logToConsole(`🚀 Token MMORPG Server running on http://localhost:${PORT}`, 'success');
-  logToConsole(`🎮 Game initialized: ${currentBossName} awaits challengers!`, 'info');
-  logToConsole(`📊 Monitoring token: ${TOKEN_MINT}`, 'info');
+  logToConsole(`🚀 Accurate ATH MMORPG Server running on http://localhost:${PORT}`, 'success');
+  logToConsole(`🎮 Permanent ATH tracking activated!`, 'info');
+  logToConsole(`📊 Monitoring token: ${TOKEN_MINT} with enhanced accuracy`, 'info');
 });
 
-// ---- GAME LOOP ----
+// ---- ENHANCED GAME LOOP ----
 async function gameLoop() {
   let currentPriceData = null;
   
-  // Game tick every 10 seconds
   setInterval(() => {
-    // Boss attacks randomly
-    if (Math.random() < 0.3) { // 30% chance per tick
+    if (Math.random() < 0.3) {
       bossAttack();
       broadcastUpdate();
     }
-    
-    // Check boss phase
     updateBossPhase();
-    
-    // Check for boss defeat
     checkBossDefeat();
-    
   }, 10000);
 
-  // Main monitoring loop
   while (true) {
     try {
       const priceResult = await fetchTokenPrice(TOKEN_MINT);
@@ -933,7 +1101,6 @@ async function gameLoop() {
         currentPriceData = priceResult;
         priceHistory.push(priceResult);
         if (priceHistory.length > 1000) priceHistory.shift();
-        broadcastUpdate();
       }
 
       const newPurchases = await monitorNewTokenTransactions();
@@ -945,12 +1112,14 @@ async function gameLoop() {
             purchase.isATHPurchase = currentPriceData.isNewATH;
             athPurchases.push(purchase);
 
-            // MMORPG GAME LOGIC
+            // Update permanent ATH storage
+            updatePermanentAthPlayers(purchase);
+
             if (!playerCharacters.has(purchase.wallet)) {
               createPlayerCharacter(purchase.wallet, purchase);
               gameHistory.push({
                 type: "PLAYER_JOIN",
-                message: `🎮 New player joined: ${purchase.wallet.slice(0, 8)}... the ${playerCharacters.get(purchase.wallet).class}!`,
+                message: \`🎮 New player joined: \${purchase.wallet} the \${playerCharacters.get(purchase.wallet).class}!\`,
                 timestamp: Date.now()
               });
             }
@@ -958,7 +1127,6 @@ async function gameLoop() {
             const player = playerCharacters.get(purchase.wallet);
             player.lastAction = Date.now();
 
-            // Calculate damage to boss
             const damage = calculateDamage(purchase, currentPriceData.price);
             bossHealth = Math.max(0, bossHealth - damage);
             player.totalDamage += damage;
@@ -966,22 +1134,17 @@ async function gameLoop() {
 
             gameHistory.push({
               type: "PLAYER_ATTACK",
-              message: `⚔️ ${purchase.wallet.slice(0, 8)}... attacks ${currentBossName} for ${damage} damage!`,
+              message: \`⚔️ \${purchase.wallet} attacks \${currentBossName} for \${damage} damage at $\${currentPriceData.price.toFixed(8)}!\`,
               timestamp: Date.now()
             });
 
-            if (purchase.isATHPurchase) {
-              logToConsole(`🎯 ATH PURCHASE! ${purchase.wallet.slice(0, 8)}... dealt ${damage} damage at $${currentPriceData.price.toFixed(8)}`, 'success');
-            }
-
-            // Level up player based on purchase size
             if (purchase.solAmount > 0.5) {
               player.level++;
               player.maxHealth += 10;
               player.power += 2;
               gameHistory.push({
                 type: "PLAYER_LEVEL_UP",
-                message: `🌟 ${purchase.wallet.slice(0, 8)}... leveled up to Lv${player.level}!`,
+                message: \`🌟 \${purchase.wallet} leveled up to Lv\${player.level}!\`,
                 timestamp: Date.now()
               });
             }
@@ -999,28 +1162,26 @@ async function gameLoop() {
         recentHolders.clear();
       }
 
-      // Remove inactive players (24h no activity)
       const now = Date.now();
       Array.from(playerCharacters.entries()).forEach(([wallet, player]) => {
         if (now - player.lastAction > 24 * 60 * 60 * 1000) {
           playerCharacters.delete(wallet);
           gameHistory.push({
             type: "PLAYER_LEAVE",
-            message: `👋 ${wallet.slice(0, 8)}... has left the battle.`,
+            message: \`👋 \${wallet} has left the battle.\`,
             timestamp: now
           });
         }
       });
 
     } catch (e) {
-      logToConsole(`❌ Error in game loop: ${e.message}`, 'error');
+      logToConsole(\`❌ Error in game loop: \${e.message}\`, 'error');
     }
     await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
   }
 }
 
 gameLoop().catch(e => {
-  logToConsole(`💥 Fatal game error: ${e.message}`, 'error');
+  logToConsole(\`💥 Fatal game error: \${e.message}\`, 'error');
   process.exit(1);
 });
-
