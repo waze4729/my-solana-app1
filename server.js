@@ -13,15 +13,6 @@ let priceHistory = [];
 let athPurchases = [];
 let fullTransactions = [];
 let consoleMessages = [];
-// Creator fees variables
-let creatorFeesCollected = 0;
-let creatorFeesLastChecked = null;
-let creatorFeesCollectedAt = null;
-let creatorFeesRewarded = null;
-let creatorFeesRewardAmount = 0;
-let creatorFeesRewardTx = null;
-const CREATOR_FEE_GOAL = 0.5; // 0.5 SOL goal for loading bar
-
 const connection = new Connection(RPC_ENDPOINT, { commitment: "confirmed" });
 
 const processedTransactions = new Set();
@@ -70,16 +61,7 @@ function getCurrentDashboardData() {
       priceChange24h: lastPrice.priceChange24h || 0
     },
     athChad,
-    recentAthPurchases,
-    creatorFees: {
-      collected: creatorFeesCollected,
-      collectedAt: creatorFeesCollectedAt,
-      lastChecked: creatorFeesLastChecked,
-      rewardAmount: creatorFeesRewardAmount,
-      rewardedAt: creatorFeesRewarded,
-      rewardTx: creatorFeesRewardTx,
-      goal: CREATOR_FEE_GOAL
-    }
+    recentAthPurchases
   };
 }
 
@@ -225,45 +207,6 @@ async function monitorNewTokenTransactions() {
         if (!tx || !tx.meta || tx.meta.err) {
           processedTransactions.add(sig.signature);
           continue;
-        }
-        // Extract creator fees from tx.meta.logMessages (SPL token transfer with fee)
-        let feeFound = false;
-        if (tx.meta.innerInstructions) {
-          for (const inner of tx.meta.innerInstructions) {
-            if (inner.instructions) {
-              for (const ix of inner.instructions) {
-                // Check for SPL token transfer with fee (instruction data usually starts with 3 for TransferChecked)
-                if (ix.programId && ix.programId.toString().includes("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")) {
-                  // Extract fee from parsed inner transfer, if available
-                  // NOTE: This is a heuristic, real fee extraction depends on token metadata
-                }
-              }
-            }
-          }
-        }
-        // Try to detect standard creator fee transfer by analyzing SOL transfer amounts (for a real implementation, need to check token metadata)
-        if (tx.meta.postBalances && tx.meta.preBalances) {
-          let fee = 0;
-          for (let i = 0; i < tx.meta.postBalances.length; i++) {
-            const diff = (tx.meta.postBalances[i] - tx.meta.preBalances[i]) / LAMPORTS_PER_SOL;
-            if (diff > 0.001 && diff < 0.2) { // heuristically, a SOL fee received
-              fee += diff;
-            }
-          }
-          if (fee > 0.001) {
-            creatorFeesCollected += fee;
-            creatorFeesCollectedAt = new Date((tx.blockTime || Math.floor(Date.now() / 1000)) * 1000).toISOString();
-            creatorFeesLastChecked = new Date().toISOString();
-            logToConsole(`Creator fee collected: +${fee.toFixed(6)} SOL (total: ${creatorFeesCollected.toFixed(6)} SOL)`, 'success');
-            feeFound = true;
-          }
-        }
-        // Check if reward threshold met and reward not yet sent
-        if (creatorFeesCollected >= CREATOR_FEE_GOAL && !creatorFeesRewarded) {
-          creatorFeesRewarded = new Date().toISOString();
-          creatorFeesRewardAmount = creatorFeesCollected;
-          creatorFeesRewardTx = sig.signature;
-          logToConsole(`Creator fee reward ready! ${creatorFeesCollected.toFixed(6)} SOL (tx: ${sig.signature})`, 'success');
         }
         const txTime = tx.blockTime ? tx.blockTime * 1000 : 0;
         const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
@@ -492,50 +435,12 @@ app.get("/", (req, res) => {
       .status-disconnected { color: #ff6b6b; }
       .blink { animation: blink 1s infinite; }
       @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
-      /* Creator fees bar */
-      .creator-fees-section {
-        border: 2px solid #ff6b6b;
-        background: rgba(255, 107, 107, 0.07);
-        margin: 20px 0;
-        padding: 16px;
-      }
-      .creator-fees-title {
-        color: #ff6b6b;
-        font-weight: 700;
-        font-size: 14px;
-        margin-bottom: 10px;
-      }
-      .creator-fees-bar-bg {
-        width: 100%;
-        background: #222;
-        height: 20px;
-        border-radius: 8px;
-        border: 1px solid #ff6b6b;
-        margin-bottom: 6px;
-        overflow: hidden;
-        box-shadow: 0 0 4px #ff6b6b30;
-      }
-      .creator-fees-bar-fg {
-        height: 100%;
-        background: linear-gradient(90deg, #ff6b6b 0%, #ffff00 100%);
-        transition: width 0.7s;
-        border-radius: 8px 0 0 8px;
-        text-align: right;
-        color: #222;
-        font-weight: 700;
-        font-size: 13px;
-        padding-right: 10px;
-        line-height: 20px;
-      }
-      .creator-fees-meta { color: #bbb; font-size: 11px; margin-bottom: 2px; }
-      .creator-fees-tx { color: #00ffff; font-size: 10px; word-break: break-all; }
       @media (max-width: 768px) {
         body { font-size: 10px; }
         .terminal-container { margin: 5px; padding: 10px; }
         .ascii-header { font-size: 8px; }
         .console-section { height: 250px; }
         .ath-hero .signature { font-size: 8px; }
-        .creator-fees-bar-fg { font-size: 10px; }
       }
       ::-webkit-scrollbar { width: 8px; }
       ::-webkit-scrollbar-track { background: #000; }
@@ -551,19 +456,6 @@ app.get("/", (req, res) => {
       <div class="ascii-header">
 [BACKROOMS LEVEL ∞] // TERMINAL ACCESS GRANTED //  MODE ACTIVE
 TOKEN: ${TOKEN_MINT}
-      </div>
-      <!-- Creator Fees Section -->
-      <div class="creator-fees-section" id="creator-fees-section">
-        <div class="creator-fees-title">👑 CREATOR FEES PROGRESS</div>
-        <div class="creator-fees-bar-bg">
-          <div class="creator-fees-bar-fg" id="creator-fees-bar" style="width:0%">0 SOL / 0.5 SOL</div>
-        </div>
-        <div class="creator-fees-meta" id="creator-fees-meta">
-          Last checked: -- | Collected: -- | Rewarded: --
-        </div>
-        <div class="creator-fees-meta" id="creator-fees-meta2">
-          Reward Amount: -- | Reward Tx: <span class="creator-fees-tx">--</span>
-        </div>
       </div>
       <!-- ATH HERO SECTION -->
       <div id="ath-hero-section" style="display: none;">
@@ -630,19 +522,7 @@ TOKEN: ${TOKEN_MINT}
         ws.onerror = (error) => {};
       }
       function updateDashboard(data) {
-        const { athChad, recentAthPurchases, consoleMessages, creatorFees } = data;
-        // Creator fees progress
-        if (creatorFees) {
-          const bar = document.getElementById('creator-fees-bar');
-          const percent = Math.min(100, (creatorFees.collected / creatorFees.goal) * 100).toFixed(2);
-          bar.style.width = percent + '%';
-          bar.textContent = 
-            \`\${parseFloat(creatorFees.collected || 0).toFixed(6)} SOL / \${creatorFees.goal} SOL\`;
-          document.getElementById('creator-fees-meta').textContent =
-            \`Last checked: \${creatorFees.lastChecked || '--'} | Collected: \${creatorFees.collectedAt || '--'} | Rewarded: \${creatorFees.rewardedAt || '--'}\`;
-          document.getElementById('creator-fees-meta2').innerHTML =
-            \`Reward Amount: \${creatorFees.rewardAmount || '--'} | Reward Tx: <span class="creator-fees-tx">\${creatorFees.rewardTx || '--'}</span>\`;
-        }
+        const { athChad, recentAthPurchases, consoleMessages } = data;
         // Update ATH HERO section (only if solAmount >= ATH_BUY_MIN_SOL)
         const heroSection = document.getElementById('ath-hero-section');
         if (athChad) {
