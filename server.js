@@ -6,7 +6,7 @@ import fetch from 'node-fetch'; // Polyfill fetch for Node < 18 or for consisten
 
 const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
 const TOKEN_MINT = "D46Zrq3Fo6HncZ69RfC46r99TyujyJ4BhhFfgUyxpump";
-const POLL_INTERVAL_MS = 2000;
+const POLL_INTERVAL_MS = 5000;
 const ATH_BUY_MIN_SOL = 0.1; // Only show ATH CHAD if purchase >= 0.1 SOL
 
 let allTimeHighPrice = 0;
@@ -648,5 +648,6 @@ loop().catch(e => {
   logToConsole(`💥 Fatal error: ${e.message}`, 'error');
   process.exit(1);
 });
+
 
 
