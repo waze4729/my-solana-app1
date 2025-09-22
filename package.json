@@ -1,22 +1,21 @@
 {
   "name": "solana-scanner",
   "version": "1.0.0",
-  "description": "Solana token holder scanner",
   "type": "module",
+  "description": "Solana ATH Buyer Tracker with MMORPG Interface",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node --watch server.js"
   },
   "dependencies": {
     "@solana/web3.js": "^1.87.6",
+    "@pump-fun/pump-sdk": "^0.1.18",
     "express": "^4.18.2",
-    "body-parser": "^1.20.2",
-    "node-fetch": "^3.3.2",
-    "ws": "^8.13.0",
-    "socket.io": "^4.7.5",
-    "express-session": "^1.17.3"
+    "ws": "^8.14.2",
+    "node-fetch": "^3.3.2"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=18.0.0"
   }
 }
