@@ -5,7 +5,7 @@ import http from 'http';
 import fetch from 'node-fetch'; // Polyfill fetch for Node < 18 or for consistent ESM
 
 const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
-const TOKEN_MINT = "D46Zrq3Fo6HncZ69RfC46r99TyujyJ4BhhFfgUyxpump";
+const TOKEN_MINT = "Gupf4N7c9WWr87naP2pC2m5JCwrs8QFBRB6yC1Xomxr7";
 const POLL_INTERVAL_MS = 5000;
 const ATH_BUY_MIN_SOL = 0.1; // Only show ATH CHAD if purchase >= 0.1 SOL
 
@@ -648,6 +648,7 @@ loop().catch(e => {
   logToConsole(`💥 Fatal error: ${e.message}`, 'error');
   process.exit(1);
 });
+
 
 
 
