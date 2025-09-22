@@ -2,6 +2,7 @@ import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import express from "express";
 import { WebSocketServer } from 'ws';
 import http from 'http';
+import fetch from 'node-fetch'; // Polyfill fetch for Node < 18 or for consistent ESM
 
 const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
 const TOKEN_MINT = "AoedByk5vF5mxWF8jo4wWm9PXZZxFq729knEXQzhpump";
@@ -591,7 +592,7 @@ app.get("/api/stats", (req, res) => {
   res.json(getCurrentDashboardData());
 });
 
-const PORT = 1000;
+const PORT = process.env.PORT || 1000;
 server.listen(PORT, () => {
   logToConsole(`🚀 Server running on http://localhost:${PORT}`, 'success');
   logToConsole(`📊 Monitoring token: ${TOKEN_MINT}`, 'info');
