@@ -5,8 +5,8 @@ import http from 'http';
 import fetch from 'node-fetch'; // Polyfill fetch for Node < 18 or for consistent ESM
 
 const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
-const TOKEN_MINT = "AoedByk5vF5mxWF8jo4wWm9PXZZxFq729knEXQzhpump";
-const POLL_INTERVAL_MS = 2000;
+const TOKEN_MINT = "D46Zrq3Fo6HncZ69RfC46r99TyujyJ4BhhFfgUyxpump";
+const POLL_INTERVAL_MS = 1369;
 const ATH_BUY_MIN_SOL = 0.1; // Only show ATH CHAD if purchase >= 0.1 SOL
 
 let allTimeHighPrice = 0;
@@ -455,7 +455,9 @@ app.get("/", (req, res) => {
     </div>
     <div class="terminal-container">
       <div class="ascii-header">
-[BACKROOMS LEVEL ∞] // TERMINAL ACCESS GRANTED //  MODE ACTIVE
+[BACKROOMS LEVEL ∞] // TERMINAL ACCESS GRANTED //  MODE ACTIVE <BR>
+REWARD 40% OF COLLECTED FEE TO TOP CHAD ATH BUYER
+FEE COLLECTING AND REWARDING TOP CHAD EVERY +0.5 SOL
 TOKEN: ${TOKEN_MINT}
       </div>
       <!-- ATH HERO SECTION -->
@@ -646,3 +648,4 @@ loop().catch(e => {
   logToConsole(`💥 Fatal error: ${e.message}`, 'error');
   process.exit(1);
 });
+
