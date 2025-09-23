@@ -245,7 +245,7 @@ function assignGuaranteedGreenBlocks() {
         if (!assignedHoldersThisGame.has(wallet)) {
             // Find first available hidden block
             for (let i = 0; i < TOTAL_BLOCKS; i++) {
-                if (gameBlocks[i].status === 'hidden' && !gameBlocks[i].assignedHolder) {
+    if (gameBlocks[i].status === 'hidden' && !gameBlocks[i].assignedHolder && !gameBlocks[i].isGuaranteedGreen) {
                     // Auto-reveal guaranteed blocks immediately
                     gameBlocks[i] = {
                         status: 'revealed',
@@ -1283,5 +1283,6 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
