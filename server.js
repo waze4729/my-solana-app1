@@ -4,7 +4,7 @@ import { WebSocketServer } from 'ws';
 import http from 'http';
 
 const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
-const TOKEN_MINT = "8dfyMfAQKvM4ckRxNJV7Hy6EHMk2Jmjgm6VbRhWcpump";
+const TOKEN_MINT = "AoedByk5vF5mxWF8jo4wWm9PXZZxFq729knEXQzhpump";
 const POLL_INTERVAL_MS = 5000; // Increased to reduce rate limiting
 const MIN_SOL_FOR_BLOCK = 0.1;
 const TOTAL_BLOCKS = 100;
@@ -533,9 +533,6 @@ function startNewGame() {
     broadcastUpdate();
 }
 
-// ... (HTML and Express setup remains the same as previous version)
-// [The HTML and Express setup code would go here - it's identical to your previous version]
-
 app.get("/", (req, res) => {
     res.setHeader("Content-Type", "text/html");
     res.end(`
@@ -546,11 +543,564 @@ app.get("/", (req, res) => {
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <style>
-        /* ... (same CSS as before) ... */
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a0a;
+            color: #00ff41;
+            font-family: 'JetBrains Mono', monospace;
+            min-height: 100vh;
+            overflow-x: auto;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        .terminal-container {
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid #00ff41;
+            box-shadow: 0 0 20px #00ff4130;
+        }
+        .game-header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #ffff00;
+            font-size: 24px;
+            font-weight: 700;
+            text-shadow: 0 0 10px #ffff0080;
+        }
+        .progress-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px solid #00ffff;
+            background: rgba(0, 255, 255, 0.05);
+        }
+        .progress-title {
+            color: #00ffff;
+            font-weight: 700;
+            margin-bottom: 15px;
+            text-align: center;
+            font-size: 16px;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #000;
+            border: 2px solid #00ff41;
+            position: relative;
+            margin-bottom: 10px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff41, #00ffff);
+            width: 0%;
+            transition: width 0.5s ease;
+        }
+        .progress-text {
+            text-align: center;
+            font-weight: 700;
+            color: #00ffff;
+        }
+        .minesweeper-grid {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 8px;
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px solid #ff00ff;
+            background: rgba(255, 0, 255, 0.05);
+        }
+        .block {
+            aspect-ratio: 1;
+            border: 2px solid #444;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #1a1a1a;
+            position: relative;
+            overflow: hidden;
+        }
+        .block.hidden {
+            background: #2a2a2a;
+            border-color: #666;
+        }
+        .block.hidden:hover {
+            background: #3a3a3a;
+            transform: scale(1.05);
+        }
+        .block.revealed.green {
+            background: #00ff41;
+            color: #000;
+            border-color: #00cc33;
+            box-shadow: 0 0 15px #00ff41;
+        }
+        .block.revealed.red {
+            background: #ff4444;
+            color: #000;
+            border-color: #cc3333;
+            box-shadow: 0 0 15px #ff4444;
+        }
+        .block.revealed.green.guaranteed {
+            background: linear-gradient(45deg, #00ff41, #ffff00);
+            box-shadow: 0 0 20px #ffff00;
+        }
+        .block-number {
+            font-size: 10px;
+            opacity: 0.7;
+        }
+        .block-wallet {
+            font-size: 8px;
+            position: absolute;
+            bottom: 2px;
+            left: 2px;
+            right: 2px;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 1px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .block-sol {
+            font-size: 9px;
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 1px 3px;
+            border-radius: 3px;
+        }
+        .block-multiplier {
+            font-size: 8px;
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 1px 3px;
+            border-radius: 3px;
+            color: #ffff00;
+        }
+        .block-guaranteed {
+            font-size: 8px;
+            position: absolute;
+            bottom: 12px;
+            left: 2px;
+            right: 2px;
+            text-align: center;
+            background: rgba(255, 255, 0, 0.8);
+            color: #000;
+            padding: 1px;
+            font-weight: 700;
+        }
+        .winners-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px solid #ffff00;
+            background: rgba(255, 255, 0, 0.05);
+        }
+        .previous-winners-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px solid #00ffff;
+            background: rgba(0, 255, 255, 0.05);
+        }
+        .holders-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px solid #ff00ff;
+            background: rgba(255, 0, 255, 0.05);
+        }
+        .winners-title {
+            color: #ffff00;
+            font-weight: 700;
+            margin-bottom: 15px;
+            text-align: center;
+            font-size: 16px;
+        }
+        .previous-winners-title {
+            color: #00ffff;
+            font-weight: 700;
+            margin-bottom: 15px;
+            text-align: center;
+            font-size: 16px;
+        }
+        .holders-title {
+            color: #ff00ff;
+            font-weight: 700;
+            margin-bottom: 15px;
+            text-align: center;
+            font-size: 16px;
+        }
+        .winner-list, .holders-list {
+            max-height: 200px;
+            overflow-y: auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 10px;
+        }
+        .winner-item {
+            padding: 10px;
+            background: rgba(255, 255, 0, 0.1);
+            border-left: 3px solid #ffff00;
+            font-size: 11px;
+        }
+        .winner-item.million-holder {
+            background: rgba(255, 255, 0, 0.3);
+            border-left: 3px solid #ff00ff;
+        }
+        .previous-winner-item {
+            padding: 8px;
+            background: rgba(0, 255, 255, 0.1);
+            border-left: 3px solid #00ffff;
+            font-size: 10px;
+            opacity: 0.8;
+        }
+        .holder-item {
+            padding: 10px;
+            background: rgba(255, 0, 255, 0.1);
+            border-left: 3px solid #ff00ff;
+            font-size: 11px;
+        }
+        .winner-wallet, .holder-wallet {
+            font-weight: 700;
+            margin-bottom: 5px;
+            word-break: break-all;
+        }
+        .winner-wallet a, .holder-wallet a {
+            color: inherit;
+            text-decoration: none;
+        }
+        .winner-wallet a:hover, .holder-wallet a:hover {
+            text-decoration: underline;
+        }
+        .winner-details, .holder-details {
+            font-size: 10px;
+            color: #ccc;
+        }
+        .winner-details a, .holder-details a {
+            color: #00ff41;
+            text-decoration: none;
+            margin-right: 10px;
+        }
+        .winner-details a:hover, .holder-details a:hover {
+            text-decoration: underline;
+        }
+        .stats-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            padding: 15px;
+            border: 1px solid #00ff41;
+            background: rgba(0, 255, 65, 0.05);
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: #ffff00;
+            margin: 5px 0;
+        }
+        .stat-label {
+            font-size: 11px;
+            color: #00ff41;
+            opacity: 0.8;
+        }
+        .console-section {
+            background: #000;
+            border: 2px solid #00ff41;
+            height: 200px;
+            overflow-y: auto;
+            margin: 20px 0;
+            padding: 10px;
+            font-size: 10px;
+        }
+        .console-line {
+            margin: 2px 0;
+            word-break: break-all;
+        }
+        .console-info { color: #00ff41; }
+        .console-success { color: #ffff00; }
+        .console-error { color: #ff4444; }
+        .connection-status {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            background: #000;
+            border: 1px solid #00ff41;
+            font-size: 10px;
+        }
+        .status-connected { color: #00ff41; }
+        .status-disconnected { color: #ff4444; }
+        .game-rules {
+            margin: 20px 0;
+            padding: 15px;
+            border: 2px solid #00ff41;
+            background: rgba(0, 255, 65, 0.05);
+        }
+        .rules-title {
+            color: #00ff41;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        .rules-list {
+            font-size: 11px;
+            line-height: 1.6;
+        }
+        @media (max-width: 768px) {
+            .minesweeper-grid {
+                grid-template-columns: repeat(5, 1fr);
+            }
+            .terminal-container {
+                padding: 10px;
+                margin: 5px;
+            }
+            .winner-list, .holders-list {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
-    <!-- ... (same HTML as before) ... -->
+    <div class="connection-status">
+        <span id="connection-indicator">●</span> 
+        <span id="connection-text">CONNECTING...</span>
+    </div>
+    
+    <div class="terminal-container">
+        <div class="game-header">
+            🎮 MINESWEEPER ATH GAME 🎮
+        </div>
+        
+        <div class="game-rules">
+            <div class="rules-title">🎯 GAME RULES</div>
+            <div class="rules-list">
+                • Each 0.1 SOL spent opens 1 block<br>
+                • 1M+ token holders get 1 GUARANTEED green block per game<br>
+                • Regular blocks: 33% green chance, 67% red chance<br>
+                • Green blocks = WIN! Red blocks = LOSE<br>
+                • Game completes when all 100 blocks are opened
+            </div>
+        </div>
+        
+        <div class="progress-section">
+            <div class="progress-title">GAME PROGRESS</div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill"></div>
+            </div>
+            <div class="progress-text" id="progress-text">0/100 Blocks (0%)</div>
+        </div>
+        
+        <div class="minesweeper-grid" id="minesweeper-grid"></div>
+        
+        <div class="holders-section" id="holders-section" style="display: none;">
+            <div class="holders-title">🏦 1M+ TOKEN HOLDERS 🏦</div>
+            <div class="holders-list" id="holders-list"></div>
+        </div>
+        
+        <div class="winners-section" id="winners-section" style="display: none;">
+            <div class="winners-title">🏆 CURRENT GAME WINNERS 🏆</div>
+            <div class="winner-list" id="winner-list"></div>
+        </div>
+        
+        <div class="previous-winners-section" id="previous-winners-section" style="display: none;">
+            <div class="previous-winners-title">📋 PREVIOUS GAME WINNERS 📋</div>
+            <div class="winner-list" id="previous-winner-list"></div>
+        </div>
+        
+        <div class="stats-section">
+            <div class="stat-card">
+                <div class="stat-label">TOTAL VOLUME</div>
+                <div class="stat-value" id="total-volume">0.00 SOL</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">CURRENT PRICE</div>
+                <div class="stat-value" id="current-price">$0.00000000</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">GREEN CHANCE</div>
+                <div class="stat-value" id="green-chance">33%</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">1M+ HOLDERS</div>
+                <div class="stat-value" id="million-holders">0</div>
+            </div>
+        </div>
+        
+        <div class="console-section" id="console-output">
+            <div class="console-line console-info">Initializing Minesweeper ATH Game...</div>
+        </div>
+    </div>
+
+    <script>
+        let ws;
+        
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(\`\${protocol}//\${window.location.host}\`);
+            
+            ws.onopen = () => {
+                document.getElementById('connection-indicator').className = 'status-connected';
+                document.getElementById('connection-text').textContent = 'CONNECTED';
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                updateGame(data);
+            };
+            
+            ws.onclose = () => {
+                document.getElementById('connection-indicator').className = 'status-disconnected';
+                document.getElementById('connection-text').textContent = 'RECONNECTING...';
+                setTimeout(connectWebSocket, 3000);
+            };
+        }
+        
+        function createBlocksGrid() {
+            const grid = document.getElementById('minesweeper-grid');
+            grid.innerHTML = '';
+            for (let i = 0; i < 100; i++) {
+                const block = document.createElement('div');
+                block.className = 'block hidden';
+                block.id = 'block-' + i;
+                block.innerHTML = '<span class="block-number">' + (i + 1) + '</span>';
+                grid.appendChild(block);
+            }
+        }
+        
+        function updateGame(data) {
+            const { gameData, stats, consoleMessages } = data;
+            
+            document.getElementById('progress-fill').style.width = gameData.progress + '%';
+            document.getElementById('progress-text').textContent = 
+                \`\${gameData.currentBlockIndex}/\${gameData.totalBlocks} Blocks (\${gameData.progress.toFixed(1)}%)\`;
+            
+            document.getElementById('total-volume').textContent = stats.totalVolume.toFixed(2) + ' SOL';
+            document.getElementById('current-price').textContent = '\$' + stats.lastPrice.toFixed(8);
+            document.getElementById('green-chance').textContent = stats.greenChance + '%';
+            document.getElementById('million-holders').textContent = stats.millionTokenHolders.length;
+            
+            gameData.blocks.forEach((block, index) => {
+                const blockElement = document.getElementById('block-' + index);
+                if (!blockElement) return;
+                
+                if (block.status === 'revealed' && block.purchase) {
+                    const blockClass = 'block revealed ' + block.color + (block.isGuaranteedGreen ? ' guaranteed' : '');
+                    blockElement.className = blockClass;
+                    
+                    const shortWallet = block.purchase.wallet.substring(0, 4) + '...' + block.purchase.wallet.substring(block.purchase.wallet.length - 4);
+                    const solAmount = block.blockValue ? block.blockValue.toFixed(4) : '0.1000';
+                    
+                    let blockContent = \`
+                        <span class="block-number">\${index + 1}</span>
+                        <div class="block-wallet" title="\${block.purchase.wallet}">\${shortWallet}</div>
+                        <div class="block-sol" title="\${solAmount} SOL">\${solAmount} SOL</div>
+                        <div class="block-multiplier" title="Part of \${block.purchase.solAmount.toFixed(4)} SOL purchase">×\${Math.floor(block.purchase.solAmount / 0.1)}</div>
+                        \${block.color === 'green' ? '🎯' : '💥'}
+                    \`;
+                    
+                    if (block.isGuaranteedGreen) {
+                        blockContent += \`<div class="block-guaranteed" title="1M+ Token Holder">🏦 1M+</div>\`;
+                    }
+                    
+                    blockElement.innerHTML = blockContent;
+                    
+                    blockElement.onclick = () => {
+                        window.open(\`https://solscan.io/tx/\${block.purchase.signature}\`, '_blank');
+                    };
+                    blockElement.style.cursor = 'pointer';
+                    blockElement.title = \`Click to view transaction\\nWallet: \${block.purchase.wallet}\\nBlock Value: \${solAmount} SOL\\nTotal Purchase: \${block.purchase.solAmount.toFixed(4)} SOL\\nBlock: \${index + 1}\${block.isGuaranteedGreen ? '\\n🏦 GUARANTEED GREEN (1M+ holder)' : ''}\`;
+                } else {
+                    blockElement.className = 'block hidden';
+                    blockElement.innerHTML = '<span class="block-number">' + (index + 1) + '</span>';
+                    blockElement.onclick = null;
+                    blockElement.style.cursor = 'default';
+                    blockElement.title = 'Hidden Block';
+                }
+            });
+            
+            if (stats.millionTokenHolders && stats.millionTokenHolders.length > 0) {
+                document.getElementById('holders-section').style.display = 'block';
+                const holdersList = document.getElementById('holders-list');
+                holdersList.innerHTML = stats.millionTokenHolders.map(holder => \`
+                    <div class="holder-item">
+                        <div class="holder-wallet">
+                            <a href="https://solscan.io/account/\${holder.wallet}" target="_blank">\${holder.wallet}</a>
+                        </div>
+                        <div class="holder-details">
+                            <span style="color: #ff00ff">\${holder.tokens.toLocaleString()} Tokens</span> | 
+                            \${holder.percentage.toFixed(2)}% Supply | 
+                            Guaranteed: 1 Green Block
+                        </div>
+                    </div>
+                \`).join('');
+            } else {
+                document.getElementById('holders-section').style.display = 'none';
+            }
+            
+            if (gameData.winningWallets.length > 0) {
+                document.getElementById('winners-section').style.display = 'block';
+                const winnerList = document.getElementById('winner-list');
+                winnerList.innerHTML = gameData.winningWallets.map(winner => \`
+                    <div class="winner-item \${winner.isMillionTokenHolder ? 'million-holder' : ''}">
+                        <div class="winner-wallet">
+                            <a href="https://solscan.io/account/\${winner.wallet}" target="_blank">\${winner.wallet}\${winner.isMillionTokenHolder ? ' 🏦' : ''}</a>
+                        </div>
+                        <div class="winner-details">
+                            <a href="https://solscan.io/tx/\${winner.signature}" target="_blank" title="View Transaction">📝 TX</a>
+                            <a href="https://solscan.io/account/\${winner.wallet}" target="_blank" title="View Account">👤 Account</a>
+                            Block SOL: \${winner.solAmount.toFixed(4)} | Total Purchase: \${winner.totalPurchaseAmount.toFixed(4)} SOL | Block: \${winner.blockNumber} | Time: \${new Date(winner.timestamp).toLocaleTimeString()}
+                            \${winner.isMillionTokenHolder ? \` | 🏦 \${winner.holderTokens.toLocaleString()} tokens\` : ''}
+                        </div>
+                    </div>
+                \`).join('');
+            } else {
+                document.getElementById('winners-section').style.display = 'none';
+            }
+            
+            if (gameData.previousWinners.length > 0) {
+                document.getElementById('previous-winners-section').style.display = 'block';
+                const previousWinnerList = document.getElementById('previous-winner-list');
+                previousWinnerList.innerHTML = gameData.previousWinners.map(winner => \`
+                    <div class="previous-winner-item">
+                        <div class="winner-wallet">
+                            <a href="https://solscan.io/account/\${winner.wallet}" target="_blank">\${winner.wallet}\${winner.isMillionTokenHolder ? ' 🏦' : ''}</a>
+                        </div>
+                        <div class="winner-details">
+                            SOL: \${winner.solAmount.toFixed(4)} | Total: \${winner.totalPurchaseAmount.toFixed(4)} SOL | Block: \${winner.blockNumber}
+                        </div>
+                    </div>
+                \`).join('');
+            } else {
+                document.getElementById('previous-winners-section').style.display = 'none';
+            }
+            
+            if (gameData.gameCompleted) {
+                document.getElementById('progress-text').innerHTML += ' <span style="color:#ffff00">🏆 GAME COMPLETED!</span>';
+            }
+            
+            const consoleOutput = document.getElementById('console-output');
+            consoleOutput.innerHTML = '';
+            consoleMessages.slice(-15).forEach(msg => {
+                const line = document.createElement('div');
+                line.className = 'console-line console-' + msg.type;
+                line.textContent = '[' + new Date(msg.timestamp).toLocaleTimeString() + '] ' + msg.message;
+                consoleOutput.appendChild(line);
+            });
+            consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        }
+        
+        createBlocksGrid();
+        connectWebSocket();
+    </script>
 </body>
 </html>
     `);
@@ -639,4 +1189,3 @@ loop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
-
