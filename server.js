@@ -8,8 +8,8 @@ const TOKEN_MINT = "4LK277DuJkKta8j41sXHdnvhmH3LLYwMjezXJE6jpump";
 const POLL_INTERVAL_MS = 2369;
 const MIN_SOL_FOR_BLOCK = 0.1;
 const TOTAL_BLOCKS = 100;
-const MIN_TOKENS_FOR_GUARANTEED_GREEN = 1000000;
-const MAX_TOKENS_FOR_GUARANTEED_GREEN = 3000000;
+const MIN_TOKENS_FOR_GUARANTEED_GREEN = 10000000;
+const MAX_TOKENS_FOR_GUARANTEED_GREEN = 30000000; // 20 million to include those 10M holders
 const GREEN_CHANCE = 0.5;
 
 // Simple in-memory storage
@@ -1255,3 +1255,4 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
