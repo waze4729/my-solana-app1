@@ -41,10 +41,11 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 const wsClients = new Set();
+
 wss.on('connection', (ws) => {
     wsClients.add(ws);
     ws.on('close', () => wsClients.delete(ws));
-    ws.send(JSON.stringify(getCurrentDashboardData())); // Fixed the function name
+    ws.send(JSON.stringify(getCurrentDashboardData()));
 });
 
 function broadcastUpdate() {
@@ -55,19 +56,6 @@ function broadcastUpdate() {
 }
 
 function getCurrentDashboardData() {
-    // Count all occupied blocks (revealed + assigned guaranteed)
-    const revealedBlocks = gameBlocks.filter(block => block.status === 'revealed').length;
-    const assignedGuaranteedBlocks = gameBlocks.filter(block => 
-        block.status === 'hidden' && 
-        block.isGuaranteedGreen && 
-        block.assignedHolder && 
-        isHolderStillQualified(block.assignedHolder)
-    ).length;
-    
-    const totalOccupiedBlocks = revealedBlocks + assignedGuaranteedBlocks;
-    const progress = Math.min(100, (totalOccupiedBlocks / TOTAL_BLOCKS) * 100);
-    
-    // Keep the green block counts for other displays
     const revealedGreenBlocks = gameBlocks.filter(block => 
         block.status === 'revealed' && block.color === 'green'
     ).length;
@@ -79,7 +67,14 @@ function getCurrentDashboardData() {
         isHolderStillQualified(block.assignedHolder)
     ).length;
     
+    // FIXED: Count ALL occupied blocks (revealed blocks regardless of color + guaranteed green blocks)
+    const totalOccupiedBlocks = gameBlocks.filter(block => 
+        block.status === 'revealed' || 
+        (block.status === 'hidden' && block.isGuaranteedGreen && block.assignedHolder && isHolderStillQualified(block.assignedHolder))
+    ).length;
+    
     const totalGreenBlocks = revealedGreenBlocks + guaranteedGreenBlocks;
+    const progress = Math.min(100, (totalOccupiedBlocks / TOTAL_BLOCKS) * 100); // FIXED: Use totalOccupiedBlocks instead of totalGreenBlocks
     
     const millionTokenHolders = Array.from(majorHolders.entries())
         .filter(([wallet, data]) => data.tokens >= MIN_TOKENS_FOR_GUARANTEED_GREEN)
@@ -108,10 +103,7 @@ function getCurrentDashboardData() {
             revealedGreenBlocks,
             guaranteedGreenBlocks,
             totalGreenBlocks,
-            // Add these new counts for the progress display
-            revealedBlocks,
-            assignedGuaranteedBlocks,
-            totalOccupiedBlocks
+            totalOccupiedBlocks // FIXED: Added this to track all occupied blocks
         },
         stats: {
             uniqueBuyers: new Set(winningWallets.map(p => p.wallet)).size,
@@ -122,13 +114,12 @@ function getCurrentDashboardData() {
             millionTokenHolders,
             tokenSupply,
             greenChance: GREEN_CHANCE * 100,
-            blocksRemaining: TOTAL_BLOCKS - totalOccupiedBlocks,
+            blocksRemaining: TOTAL_BLOCKS - currentBlockIndex,
             assignedGuaranteedBlocks: assignedHoldersThisGame.size,
             validGuaranteedBlocks: guaranteedGreenBlocks,
             revealedGreenBlocks: revealedGreenBlocks,
             totalGreenBlocks: totalGreenBlocks,
-            // Add new stats
-            totalOccupiedBlocks: totalOccupiedBlocks
+            totalOccupiedBlocks: totalOccupiedBlocks // FIXED: Added this to stats
         }
     };
 }
@@ -995,24 +986,24 @@ app.get("/", (req, res) => {
         </div>
         
         <div class="game-rules">
-            <div class="rules-title">🎯 BLOCK REWARDS</div>
+            <div class="rules-title">🎯 AUTO-REVEAL SYSTEM</div>
             <div class="rules-list">
                 • 1M+ token holders: GUARANTEED GREEN blocks auto-revealed instantly (NO purchase needed)<br>
-                • Regular purchases: 0.1 SOL = 1 block<br>
-                • 1 GREEM BLOCK = 1% CREATOR FEE REWARD<br>
+                • Regular purchases: 0.1 SOL = 1 block, 0.5 SOL = 5 blocks, 0.72 SOL = 7 blocks<br>
+                • Regular blocks: ${GREEN_CHANCE * 100}% green chance (calculated at purchase time)<br>
                 • Guaranteed blocks turn RED if holder drops below 1M tokens<br>
                 • Auto-revealed blocks show "AUTO" badge and assigned wallet
             </div>
         </div>
         
-<div class="progress-section">
-    <div class="progress-title">BLOCKS PROGRESS BAR</div>
-    <div class="progress-bar">
-        <div class="progress-fill" id="progress-fill"></div>
-    </div>
-    <div class="progress-text" id="progress-text">0/100 Blocks (0%)</div>
-
-</div>
+        <div class="progress-section">
+            <div class="progress-title">TOTAL OCCUPIED BLOCKS PROGRESS (All Revealed + Guaranteed Green)</div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill"></div>
+            </div>
+            <div class="progress-text" id="progress-text">0/100 Blocks (0%)</div>
+            <div class="progress-details" id="progress-details">Loading progress details...</div>
+        </div>
         
         <div class="minesweeper-grid" id="minesweeper-grid"></div>
         
@@ -1045,8 +1036,8 @@ app.get("/", (req, res) => {
                 <div class="stat-value" id="total-green">0</div>
             </div>
             <div class="stat-card">
-                <div class="stat-label">AUTO-REVEALED</div>
-                <div class="stat-value" id="auto-revealed">0</div>
+                <div class="stat-label">TOTAL OCCUPIED BLOCKS</div>
+                <div class="stat-value" id="total-occupied">0</div>
             </div>
         </div>
         
@@ -1091,17 +1082,19 @@ app.get("/", (req, res) => {
             }
         }
         
-function updateGame(data) {
-    const { gameData, stats, consoleMessages } = data;
-    
-    document.getElementById('progress-fill').style.width = gameData.progress + '%';
-    document.getElementById('progress-text').textContent = 
-        `${gameData.totalOccupiedBlocks}/100 Blocks (${gameData.progress.toFixed(1)}%)`;
-    
-    // Update the detailed breakdown
-    document.getElementById('revealed-count').textContent = `${gameData.revealedBlocks} Revealed`;
-    document.getElementById('guaranteed-count').textContent = `${gameData.assignedGuaranteedBlocks} Guaranteed`;
-    document.getElementById('total-occupied').textContent = `${gameData.totalOccupiedBlocks} Total Occupied`;
+        function updateGame(data) {
+            const { gameData, stats, consoleMessages } = data;
+            
+            document.getElementById('progress-fill').style.width = gameData.progress + '%';
+            document.getElementById('progress-text').textContent = 
+                \`\${stats.totalOccupiedBlocks}/100 Blocks (\${gameData.progress.toFixed(1)}%)\`;
+            document.getElementById('progress-details').textContent = 
+                \`\${gameData.revealedGreenBlocks} Revealed Green + \${gameData.guaranteedGreenBlocks} Guaranteed Green + \${stats.totalOccupiedBlocks - gameData.totalGreenBlocks} Red Blocks = \${stats.totalOccupiedBlocks} Total Occupied Blocks\`;
+            
+            document.getElementById('total-volume').textContent = stats.totalVolume.toFixed(2) + ' SOL';
+            document.getElementById('current-price').textContent = '\$' + stats.currentPrice.toFixed(8);
+            document.getElementById('total-green').textContent = stats.totalGreenBlocks;
+            document.getElementById('total-occupied').textContent = stats.totalOccupiedBlocks;
             
             // Update blocks grid
             gameData.blocks.forEach((block, index) => {
@@ -1298,9 +1291,3 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
-
-
-
-
-
-
