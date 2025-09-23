@@ -4,7 +4,7 @@ import { WebSocketServer } from 'ws';
 import http from 'http';
 
 const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
-const TOKEN_MINT = "AoedByk5vF5mxWF8jo4wWm9PXZZxFq729knEXQzhpump";
+const TOKEN_MINT = "s5gUqwdD8d6JR8k8petVFYeYjsPgbkk6BF4Ndk7Z6uy";
 const POLL_INTERVAL_MS = 2000;
 const ATH_BUY_MIN_SOL = 0.1; // Only show ATH CHAD if purchase >= 0.1 SOL
 const VOLUME_TARGET_SOL = 10; // Volume target for round rewards
@@ -614,7 +614,7 @@ app.get("/", (req, res) => {
     </div>
     <div class="terminal-container">
       <div class="ascii-header">
-[BACKROOMS LEVEL ∞] // TERMINAL ACCESS GRANTED //  MODE ACTIVE
+BUY THE TOP AND GOT REWARDED - 50% CREATOR FEE EVERY ROUND
 TOKEN: ${TOKEN_MINT}
       </div>
       
@@ -877,3 +877,4 @@ loop().catch(e => {
   logToConsole(`💥 Fatal error: ${e.message}`, 'error');
   process.exit(1);
 });
+
