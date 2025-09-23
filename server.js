@@ -23,6 +23,7 @@ let gameBlocks = Array(TOTAL_BLOCKS).fill(null).map(() => ({
 let currentBlockIndex = 0;
 let gameCompleted = false;
 let winningWallets = [];
+let previousWinners = [];
 const connection = new Connection(RPC_ENDPOINT, { commitment: "confirmed" });
 
 const processedTransactions = new Set();
@@ -62,7 +63,8 @@ function getCurrentDashboardData() {
             totalBlocks: TOTAL_BLOCKS,
             progress,
             gameCompleted,
-            winningWallets
+            winningWallets,
+            previousWinners
         },
         stats: {
             totalATHPurchases: athPurchases.filter(p => p.isATHPurchase).length,
@@ -295,30 +297,68 @@ function processGameBlock(purchase) {
     if (gameCompleted || currentBlockIndex >= TOTAL_BLOCKS) return;
     
     if (purchase.solAmount >= MIN_SOL_FOR_BLOCK) {
-        const blockColor = Math.random() > 0.5 ? 'green' : 'red';
-        gameBlocks[currentBlockIndex] = {
-            status: 'revealed',
-            color: blockColor,
-            purchase: purchase
-        };
+        const blocksToOpen = Math.floor(purchase.solAmount / MIN_SOL_FOR_BLOCK);
+        const actualBlocksToOpen = Math.min(blocksToOpen, TOTAL_BLOCKS - currentBlockIndex);
         
-        if (blockColor === 'green') {
-            winningWallets.push(purchase.wallet);
-            logToConsole(`🎯 GREEN BLOCK! Wallet: ${purchase.wallet} won at block ${currentBlockIndex + 1}`, 'success');
-        } else {
-            logToConsole(`💥 RED BLOCK! Wallet: ${purchase.wallet} lost at block ${currentBlockIndex + 1}`, 'error');
-        }
+        logToConsole(`💰 Wallet ${purchase.wallet} bought ${purchase.solAmount.toFixed(4)} SOL - Opening ${actualBlocksToOpen} blocks`, 'info');
         
-        currentBlockIndex++;
-        totalVolume += purchase.solAmount;
-        
-        if (currentBlockIndex >= TOTAL_BLOCKS) {
-            gameCompleted = true;
-            logToConsole(`🏆 GAME COMPLETED! ${winningWallets.length} winning wallets`, 'success');
+        for (let i = 0; i < actualBlocksToOpen; i++) {
+            if (currentBlockIndex >= TOTAL_BLOCKS) break;
+            
+            const blockColor = Math.random() > 0.5 ? 'green' : 'red';
+            gameBlocks[currentBlockIndex] = {
+                status: 'revealed',
+                color: blockColor,
+                purchase: purchase,
+                blockValue: MIN_SOL_FOR_BLOCK
+            };
+            
+            if (blockColor === 'green') {
+                winningWallets.push({
+                    wallet: purchase.wallet,
+                    solAmount: MIN_SOL_FOR_BLOCK,
+                    totalPurchaseAmount: purchase.solAmount,
+                    signature: purchase.signature,
+                    timestamp: purchase.timestamp,
+                    blockNumber: currentBlockIndex + 1
+                });
+                logToConsole(`🎯 GREEN BLOCK! Wallet: ${purchase.wallet} won at block ${currentBlockIndex + 1}`, 'success');
+            } else {
+                logToConsole(`💥 RED BLOCK! Wallet: ${purchase.wallet} at block ${currentBlockIndex + 1}`, 'error');
+            }
+            
+            currentBlockIndex++;
+            totalVolume += MIN_SOL_FOR_BLOCK;
+            
+            if (currentBlockIndex >= TOTAL_BLOCKS) {
+                gameCompleted = true;
+                previousWinners = [...winningWallets];
+                logToConsole(`🏆 GAME COMPLETED! ${winningWallets.length} winning wallets`, 'success');
+                logToConsole(`📋 Saving winners list and starting new game in 10 seconds...`, 'info');
+                
+                setTimeout(() => {
+                    startNewGame();
+                }, 10000);
+                break;
+            }
         }
         
         broadcastUpdate();
     }
+}
+
+function startNewGame() {
+    gameBlocks = Array(TOTAL_BLOCKS).fill(null).map(() => ({ 
+        status: 'hidden', 
+        color: null, 
+        purchase: null 
+    }));
+    currentBlockIndex = 0;
+    gameCompleted = false;
+    winningWallets = [];
+    
+    logToConsole(`🔄 NEW GAME STARTED! 100 blocks ready`, 'success');
+    broadcastUpdate();
 }
 
 app.get("/", (req, res) => {
@@ -344,7 +384,7 @@ app.get("/", (req, res) => {
         }
         .terminal-container {
             padding: 20px;
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             background: rgba(0, 0, 0, 0.9);
             border: 2px solid #00ff41;
@@ -393,7 +433,7 @@ app.get("/", (req, res) => {
         .minesweeper-grid {
             display: grid;
             grid-template-columns: repeat(10, 1fr);
-            gap: 5px;
+            gap: 8px;
             margin: 20px 0;
             padding: 20px;
             border: 2px solid #ff00ff;
@@ -409,32 +449,76 @@ app.get("/", (req, res) => {
             cursor: pointer;
             transition: all 0.3s ease;
             background: #1a1a1a;
+            position: relative;
+            overflow: hidden;
         }
         .block.hidden {
             background: #2a2a2a;
             border-color: #666;
         }
+        .block.hidden:hover {
+            background: #3a3a3a;
+            transform: scale(1.05);
+        }
         .block.revealed.green {
             background: #00ff41;
             color: #000;
             border-color: #00cc33;
-            box-shadow: 0 0 10px #00ff41;
+            box-shadow: 0 0 15px #00ff41;
         }
         .block.revealed.red {
             background: #ff4444;
             color: #000;
             border-color: #cc3333;
-            box-shadow: 0 0 10px #ff4444;
+            box-shadow: 0 0 15px #ff4444;
         }
         .block-number {
             font-size: 10px;
             opacity: 0.7;
+        }
+        .block-wallet {
+            font-size: 8px;
+            position: absolute;
+            bottom: 2px;
+            left: 2px;
+            right: 2px;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 1px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .block-sol {
+            font-size: 9px;
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 1px 3px;
+            border-radius: 3px;
+        }
+        .block-multiplier {
+            font-size: 8px;
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 1px 3px;
+            border-radius: 3px;
+            color: #ffff00;
         }
         .winners-section {
             margin: 20px 0;
             padding: 20px;
             border: 2px solid #ffff00;
             background: rgba(255, 255, 0, 0.05);
+        }
+        .previous-winners-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px solid #00ffff;
+            background: rgba(0, 255, 255, 0.05);
         }
         .winners-title {
             color: #ffff00;
@@ -443,15 +527,56 @@ app.get("/", (req, res) => {
             text-align: center;
             font-size: 16px;
         }
+        .previous-winners-title {
+            color: #00ffff;
+            font-weight: 700;
+            margin-bottom: 15px;
+            text-align: center;
+            font-size: 16px;
+        }
         .winner-list {
             max-height: 200px;
             overflow-y: auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 10px;
         }
         .winner-item {
-            padding: 8px;
-            margin: 5px 0;
+            padding: 10px;
             background: rgba(255, 255, 0, 0.1);
             border-left: 3px solid #ffff00;
+            font-size: 11px;
+        }
+        .previous-winner-item {
+            padding: 8px;
+            background: rgba(0, 255, 255, 0.1);
+            border-left: 3px solid #00ffff;
+            font-size: 10px;
+            opacity: 0.8;
+        }
+        .winner-wallet {
+            font-weight: 700;
+            margin-bottom: 5px;
+            word-break: break-all;
+        }
+        .winner-wallet a {
+            color: inherit;
+            text-decoration: none;
+        }
+        .winner-wallet a:hover {
+            text-decoration: underline;
+        }
+        .winner-details {
+            font-size: 10px;
+            color: #ccc;
+        }
+        .winner-details a {
+            color: #00ff41;
+            text-decoration: none;
+            margin-right: 10px;
+        }
+        .winner-details a:hover {
+            text-decoration: underline;
         }
         .stats-section {
             display: grid;
@@ -511,6 +636,9 @@ app.get("/", (req, res) => {
                 padding: 10px;
                 margin: 5px;
             }
+            .winner-list {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -536,8 +664,13 @@ app.get("/", (req, res) => {
         <div class="minesweeper-grid" id="minesweeper-grid"></div>
         
         <div class="winners-section" id="winners-section" style="display: none;">
-            <div class="winners-title">🏆 WINNING WALLETS 🏆</div>
+            <div class="winners-title">🏆 CURRENT GAME WINNERS 🏆</div>
             <div class="winner-list" id="winner-list"></div>
+        </div>
+        
+        <div class="previous-winners-section" id="previous-winners-section" style="display: none;">
+            <div class="previous-winners-title">📋 PREVIOUS GAME WINNERS 📋</div>
+            <div class="winner-list" id="previous-winner-list"></div>
         </div>
         
         <div class="stats-section">
@@ -619,29 +752,72 @@ app.get("/", (req, res) => {
                 const blockElement = document.getElementById('block-' + index);
                 if (!blockElement) return;
                 
-                if (block.status === 'revealed') {
+                if (block.status === 'revealed' && block.purchase) {
                     blockElement.className = 'block revealed ' + block.color;
-                    if (block.color === 'green') {
-                        blockElement.innerHTML = '🎯';
-                    } else {
-                        blockElement.innerHTML = '💥';
-                    }
-                    if (block.purchase) {
-                        blockElement.title = \`Wallet: \${block.purchase.wallet}\\nSOL: \${block.purchase.solAmount.toFixed(4)}\\nTime: \${block.purchase.timestamp}\`;
-                    }
+                    
+                    const shortWallet = block.purchase.wallet.substring(0, 4) + '...' + block.purchase.wallet.substring(block.purchase.wallet.length - 4);
+                    const solAmount = block.blockValue ? block.blockValue.toFixed(4) : '0.1000';
+                    
+                    blockElement.innerHTML = \`
+                        <span class="block-number">\${index + 1}</span>
+                        <div class="block-wallet" title="\${block.purchase.wallet}">\${shortWallet}</div>
+                        <div class="block-sol" title="\${solAmount} SOL">\${solAmount} SOL</div>
+                        <div class="block-multiplier" title="Part of \${block.purchase.solAmount.toFixed(4)} SOL purchase">×\${Math.floor(block.purchase.solAmount / 0.1)}</div>
+                        \${block.color === 'green' ? '🎯' : '💥'}
+                    \`;
+                    
+                    blockElement.onclick = () => {
+                        window.open(\`https://solscan.io/tx/\${block.purchase.signature}\`, '_blank');
+                    };
+                    blockElement.style.cursor = 'pointer';
+                    blockElement.title = \`Click to view transaction\\nWallet: \${block.purchase.wallet}\\nBlock Value: \${solAmount} SOL\\nTotal Purchase: \${block.purchase.solAmount.toFixed(4)} SOL\\nBlock: \${index + 1}\`;
                 } else {
                     blockElement.className = 'block hidden';
                     blockElement.innerHTML = '<span class="block-number">' + (index + 1) + '</span>';
+                    blockElement.onclick = null;
+                    blockElement.style.cursor = 'default';
                     blockElement.title = 'Hidden Block';
                 }
             });
             
-            if (gameData.gameCompleted) {
+            if (gameData.winningWallets.length > 0) {
                 document.getElementById('winners-section').style.display = 'block';
                 const winnerList = document.getElementById('winner-list');
-                winnerList.innerHTML = gameData.winningWallets.map(wallet => 
-                    '<div class="winner-item">' + wallet + '</div>'
-                ).join('');
+                winnerList.innerHTML = gameData.winningWallets.map(winner => \`
+                    <div class="winner-item">
+                        <div class="winner-wallet">
+                            <a href="https://solscan.io/account/\${winner.wallet}" target="_blank">\${winner.wallet}</a>
+                        </div>
+                        <div class="winner-details">
+                            <a href="https://solscan.io/tx/\${winner.signature}" target="_blank" title="View Transaction">📝 TX</a>
+                            <a href="https://solscan.io/account/\${winner.wallet}" target="_blank" title="View Account">👤 Account</a>
+                            Block SOL: \${winner.solAmount.toFixed(4)} | Total Purchase: \${winner.totalPurchaseAmount.toFixed(4)} SOL | Block: \${winner.blockNumber} | Time: \${new Date(winner.timestamp).toLocaleTimeString()}
+                        </div>
+                    </div>
+                \`).join('');
+            } else {
+                document.getElementById('winners-section').style.display = 'none';
+            }
+            
+            if (gameData.previousWinners.length > 0) {
+                document.getElementById('previous-winners-section').style.display = 'block';
+                const previousWinnerList = document.getElementById('previous-winner-list');
+                previousWinnerList.innerHTML = gameData.previousWinners.map(winner => \`
+                    <div class="previous-winner-item">
+                        <div class="winner-wallet">
+                            <a href="https://solscan.io/account/\${winner.wallet}" target="_blank">\${winner.wallet}</a>
+                        </div>
+                        <div class="winner-details">
+                            SOL: \${winner.solAmount.toFixed(4)} | Total: \${winner.totalPurchaseAmount.toFixed(4)} SOL | Block: \${winner.blockNumber}
+                        </div>
+                    </div>
+                \`).join('');
+            } else {
+                document.getElementById('previous-winners-section').style.display = 'none';
+            }
+            
+            if (gameData.gameCompleted) {
+                document.getElementById('progress-text').innerHTML += ' <span style="color:#ffff00">🏆 GAME COMPLETED!</span>';
             }
             
             const consoleOutput = document.getElementById('console-output');
@@ -671,7 +847,7 @@ const PORT = 1000;
 server.listen(PORT, () => {
     logToConsole(`🚀 Server running on http://localhost:${PORT}`, 'success');
     logToConsole(`🎮 Minesweeper ATH Game Started - ${TOTAL_BLOCKS} blocks`, 'info');
-    logToConsole(`⚡ Minimum SOL per block: ${MIN_SOL_FOR_BLOCK}`, 'info');
+    logToConsole(`⚡ Each 0.1 SOL opens 1 block`, 'info');
 });
 
 async function loop() {
