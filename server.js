@@ -302,6 +302,7 @@ async function analyzeTokenPurchase(tx, signature, fullTxDetails = null) {
     return null;
   }
 }
+
 // Function to check and update round rewards
 function updateRoundRewards(newPurchase) {
   if (newPurchase.isATHPurchase && newPurchase.solAmount >= ATH_BUY_MIN_SOL) {
@@ -342,18 +343,14 @@ function updateRoundRewards(newPurchase) {
         logToConsole(`🎉 ROUND ${currentRound} COMPLETE! Top ATH Buyer: ${topAthBuyer.wallet} at $${topAthBuyer.marketPrice.toFixed(8)}`, 'success');
         logToConsole(`🏆 REWARD SAVED: Round ${currentRound} winner permanently stored`, 'success');
         
-        // RESET ROUND VOLUME TO 0 FOR NEXT ROUND
+        // Reset round volume for next round
         roundVolume = 0;
-        
-        // Broadcast update immediately to show reset progress bar
-        broadcastUpdate();
       }
-    } else {
-      // If we haven't reached target, just broadcast normal update
-      broadcastUpdate();
     }
+    broadcastUpdate();
   }
 }
+
 // ---- EXPRESS SERVER ----
 app.get("/", (req, res) => {
   res.setHeader("Content-Type", "text/html");
@@ -880,5 +877,4 @@ loop().catch(e => {
   logToConsole(`💥 Fatal error: ${e.message}`, 'error');
   process.exit(1);
 });
-
-
+ after 10 sol volume the loading bar must stop from 0 again adn again how i make this in most simple way
