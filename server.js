@@ -299,6 +299,46 @@ function assignGuaranteedGreenBlocks() {
     return newlyAssigned;
 }
 
+function invalidateExistingOverLimitBlocks() {
+    let invalidatedCount = 0;
+    
+    for (let i = 0; i < TOTAL_BLOCKS; i++) {
+        const block = gameBlocks[i];
+        if (block.assignedHolder && block.isGuaranteedGreen) {
+            const holderWallet = block.assignedHolder;
+            const holderData = majorHolders.get(holderWallet);
+            
+            if (holderData && holderData.tokens > MAX_TOKENS_FOR_GUARANTEED_GREEN) {
+                // Convert guaranteed block to red
+                gameBlocks[i] = {
+                    status: 'revealed',
+                    color: 'red',
+                    purchase: block.purchase,
+                    assignedHolder: null,
+                    isGuaranteedGreen: false,
+                    isAutoRevealed: false,
+                    blockValue: block.blockValue || 0
+                };
+                
+                // Remove from winning wallets
+                winningWallets = winningWallets.filter(w => !(w.blockNumber === i + 1 && w.isAutoRevealed));
+                
+                assignedHoldersThisGame.delete(holderWallet);
+                invalidatedCount++;
+                
+                logToConsole(`❌ MANUAL INVALIDATION: Block ${i + 1} turned RED (holder ${holderWallet.substring(0, 8)}... has ${holderData.tokens.toLocaleString()} tokens > 3M limit)`, 'error');
+            }
+        }
+    }
+    
+    if (invalidatedCount > 0) {
+        logToConsole(`🔄 Manually invalidated ${invalidatedCount} blocks exceeding 3M token limit`, 'info');
+    }
+    
+    return invalidatedCount;
+}
+
+// Update the validateGuaranteedBlocks function to be more robust
 function validateGuaranteedBlocks() {
     let invalidatedBlocks = 0;
     
@@ -307,8 +347,14 @@ function validateGuaranteedBlocks() {
         const block = gameBlocks[i];
         if (block.assignedHolder && block.isGuaranteedGreen) {
             const holderWallet = block.assignedHolder;
+            const holderData = majorHolders.get(holderWallet);
             
-            if (!isHolderStillQualified(holderWallet)) {
+            // More comprehensive validation
+            const isStillQualified = holderData && 
+                                   holderData.tokens >= MIN_TOKENS_FOR_GUARANTEED_GREEN && 
+                                   holderData.tokens <= MAX_TOKENS_FOR_GUARANTEED_GREEN;
+            
+            if (!isStillQualified) {
                 if (block.status === 'revealed' && block.isAutoRevealed) {
                     // Convert auto-revealed guaranteed block to red
                     gameBlocks[i] = {
@@ -318,7 +364,7 @@ function validateGuaranteedBlocks() {
                         assignedHolder: null,
                         isGuaranteedGreen: false,
                         isAutoRevealed: false,
-                        blockValue: block.blockValue
+                        blockValue: block.blockValue || 0
                     };
                     
                     // Remove from winning wallets
@@ -326,7 +372,12 @@ function validateGuaranteedBlocks() {
                     
                     assignedHoldersThisGame.delete(holderWallet);
                     invalidatedBlocks++;
-                    logToConsole(`❌ Guaranteed block ${i + 1} turned RED (holder ${holderWallet.substring(0, 8)}... lost tokens)`, 'error');
+                    
+                    const reason = !holderData ? "holder data not found" : 
+                                 holderData.tokens < MIN_TOKENS_FOR_GUARANTEED_GREEN ? "below 1M tokens" : 
+                                 "above 3M tokens";
+                                 
+                    logToConsole(`❌ Guaranteed block ${i + 1} turned RED (${holderWallet.substring(0, 8)}... - ${reason})`, 'error');
                 }
             }
         }
@@ -990,11 +1041,11 @@ app.get("/", (req, res) => {
         <div class="game-rules">
             <div class="rules-title">🎯 AUTO-REVEAL SYSTEM</div>
             <div class="rules-list">
-                • 1M+ token holders: GUARANTEED GREEN blocks auto-revealed instantly (NO purchase needed)<br>
+                • 1M-3M holders: GUARANTEED GREEN blocks auto-revealed instantly (NO purchase needed)<br>
                 • Regular purchases: 0.1 SOL = 1 block, 0.5 SOL = 5 blocks, 0.72 SOL = 7 blocks<br>
                 • Regular blocks: ${GREEN_CHANCE * 100}% green chance (calculated at purchase time)<br>
                 • Guaranteed blocks turn RED if holder drops below 1M tokens<br>
-                • Auto-revealed blocks show "AUTO" badge and assigned wallet
+                • Every green block = 1% Reward from Creator Fees
             </div>
         </div>
         
@@ -1231,6 +1282,7 @@ server.listen(PORT, () => {
     logToConsole(`💰 Regular purchases: 0.1 SOL = 1 block, ${GREEN_CHANCE * 100}% green chance`, 'info');
 });
 
+// Update the initialize function to run the manual invalidation
 async function initialize() {
     try {
         logToConsole(`📊 Initializing token data...`, 'info');
@@ -1238,9 +1290,13 @@ async function initialize() {
         await fetchMajorHolders();
         logToConsole(`✅ Token data initialized`, 'success');
         
+        // First, invalidate any existing blocks that exceed the new limit
+        invalidateExistingOverLimitBlocks();
+        
+        // Then assign new guaranteed blocks
         const assigned = assignGuaranteedGreenBlocks();
         if (assigned > 0) {
-            logToConsole(`🎯 Auto-revealed ${assigned} guaranteed GREEN blocks for 1M+ holders`, 'success');
+            logToConsole(`🎯 Auto-revealed ${assigned} guaranteed GREEN blocks for 1M-3M holders`, 'success');
         }
     } catch (e) {
         logToConsole(`Error initializing: ${e.message}`, 'error');
@@ -1293,5 +1349,6 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
