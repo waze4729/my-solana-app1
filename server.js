@@ -22,7 +22,8 @@ let gameBlocks = Array(TOTAL_BLOCKS).fill(null).map(() => ({
     color: null, 
     purchase: null,
     assignedHolder: null,
-    isGuaranteedGreen: false
+    isGuaranteedGreen: false,
+    isAutoRevealed: false // Track if guaranteed block was auto-revealed
 }));
 let currentBlockIndex = 0;
 let gameCompleted = false;
@@ -237,6 +238,7 @@ function assignGuaranteedGreenBlocks() {
         .filter(([wallet, data]) => data.tokens >= MIN_TOKENS_FOR_GUARANTEED_GREEN);
     
     let newlyAssigned = 0;
+    let autoRevealed = 0;
     
     // Assign new guaranteed blocks for holders who don't have one yet
     for (const [wallet, holderData] of millionHolders) {
@@ -244,11 +246,36 @@ function assignGuaranteedGreenBlocks() {
             // Find first available hidden block
             for (let i = 0; i < TOTAL_BLOCKS; i++) {
                 if (gameBlocks[i].status === 'hidden' && !gameBlocks[i].assignedHolder) {
-                    gameBlocks[i].assignedHolder = wallet;
-                    gameBlocks[i].isGuaranteedGreen = true;
+                    // Auto-reveal guaranteed blocks immediately
+                    gameBlocks[i] = {
+                        status: 'revealed',
+                        color: 'green',
+                        purchase: null, // No purchase required for guaranteed blocks
+                        assignedHolder: wallet,
+                        isGuaranteedGreen: true,
+                        isAutoRevealed: true,
+                        blockValue: 0 // No SOL spent for auto-revealed blocks
+                    };
+                    
                     assignedHoldersThisGame.add(wallet);
                     newlyAssigned++;
-                    logToConsole(`🎯 Assigned guaranteed GREEN block ${i + 1} to ${wallet.substring(0, 8)}...`, 'success');
+                    autoRevealed++;
+                    
+                    // Add to winning wallets
+                    winningWallets.push({
+                        wallet: wallet,
+                        solAmount: 0,
+                        totalPurchaseAmount: 0,
+                        signature: 'AUTO_REVEALED',
+                        timestamp: new Date().toISOString(),
+                        blockNumber: i + 1,
+                        isMillionTokenHolder: true,
+                        holderTokens: holderData.tokens,
+                        isGuaranteed: true,
+                        isAutoRevealed: true
+                    });
+                    
+                    logToConsole(`🎯 AUTO-REVEALED guaranteed GREEN block ${i + 1} for ${wallet.substring(0, 8)}...`, 'success');
                     break;
                 }
             }
@@ -256,7 +283,7 @@ function assignGuaranteedGreenBlocks() {
     }
     
     if (newlyAssigned > 0) {
-        logToConsole(`✅ Assigned ${newlyAssigned} new guaranteed GREEN blocks`, 'success');
+        logToConsole(`✅ Auto-revealed ${autoRevealed} guaranteed GREEN blocks for 1M+ holders`, 'success');
     }
     
     return newlyAssigned;
@@ -272,23 +299,31 @@ function validateGuaranteedBlocks() {
             const holderWallet = block.assignedHolder;
             
             if (!isHolderStillQualified(holderWallet)) {
-                if (block.status === 'hidden') {
-                    // Block not yet revealed - remove assignment
-                    block.assignedHolder = null;
-                    block.isGuaranteedGreen = false;
+                if (block.status === 'revealed' && block.isAutoRevealed) {
+                    // Convert auto-revealed guaranteed block to red
+                    gameBlocks[i] = {
+                        status: 'revealed',
+                        color: 'red',
+                        purchase: block.purchase,
+                        assignedHolder: null,
+                        isGuaranteedGreen: false,
+                        isAutoRevealed: false,
+                        blockValue: block.blockValue
+                    };
+                    
+                    // Remove from winning wallets
+                    winningWallets = winningWallets.filter(w => !(w.blockNumber === i + 1 && w.isAutoRevealed));
+                    
                     assignedHoldersThisGame.delete(holderWallet);
                     invalidatedBlocks++;
-                    logToConsole(`❌ Removed guaranteed block ${i + 1} from ${holderWallet.substring(0, 8)}... (no longer 1M+ holder)`, 'error');
-                } else if (block.status === 'revealed') {
-                    // Block already revealed - mark guaranteed status as invalid
-                    block.isGuaranteedGreen = false;
+                    logToConsole(`❌ Guaranteed block ${i + 1} turned RED (holder ${holderWallet.substring(0, 8)}... lost tokens)`, 'error');
                 }
             }
         }
     }
     
     if (invalidatedBlocks > 0) {
-        logToConsole(`🔄 Freed ${invalidatedBlocks} guaranteed blocks from former 1M+ holders`, 'info');
+        logToConsole(`🔄 Invalidated ${invalidatedBlocks} guaranteed blocks`, 'info');
     }
     
     return invalidatedBlocks;
@@ -425,7 +460,7 @@ async function analyzeTokenPurchase(tx, signature) {
 }
 
 function processGameBlock(purchase) {
-    if (gameCompleted || currentBlockIndex >= TOTAL_BLOCKS) return;
+    if (gameCompleted) return;
     
     // Calculate how many blocks to open based on SOL spent (0.1 SOL = 1 block)
     let blocksToOpen = Math.floor(purchase.solAmount / MIN_SOL_FOR_BLOCK);
@@ -436,36 +471,36 @@ function processGameBlock(purchase) {
         logToConsole(`🏦 1M+ HOLDER: ${purchase.wallet.substring(0, 8)}... buying ${blocksToOpen} blocks`, 'success');
     }
     
-    const actualBlocksToOpen = Math.min(blocksToOpen, TOTAL_BLOCKS - currentBlockIndex);
+    // Find available hidden blocks (skip already assigned/revealed blocks)
+    const availableBlocks = [];
+    for (let i = 0; i < TOTAL_BLOCKS; i++) {
+        if (gameBlocks[i].status === 'hidden' && !gameBlocks[i].assignedHolder) {
+            availableBlocks.push(i);
+        }
+        if (availableBlocks.length >= blocksToOpen) break;
+    }
+    
+    const actualBlocksToOpen = Math.min(blocksToOpen, availableBlocks.length);
     
     if (actualBlocksToOpen > 0) {
         logToConsole(`💰 ${purchase.isMillionTokenHolder ? '🏦 ' : ''}${purchase.wallet.substring(0, 8)}... bought ${purchase.solAmount.toFixed(4)} SOL - Opening ${actualBlocksToOpen} blocks`, 'info');
         
         for (let i = 0; i < actualBlocksToOpen; i++) {
-            if (currentBlockIndex >= TOTAL_BLOCKS) break;
+            const blockIndex = availableBlocks[i];
+            if (blockIndex >= TOTAL_BLOCKS) break;
             
-            const currentBlock = gameBlocks[currentBlockIndex];
-            let blockColor = 'red';
-            let isGuaranteed = false;
+            // Regular block - calculate random chance at the moment of purchase
+            const blockColor = Math.random() < GREEN_CHANCE ? 'green' : 'red';
+            const isGuaranteed = false;
             
-            // Check if this block is guaranteed for this wallet
-            if (currentBlock.assignedHolder === purchase.wallet && currentBlock.isGuaranteedGreen) {
-                blockColor = 'green'; // Guaranteed green for the assigned holder
-                isGuaranteed = true;
-                assignedHoldersThisGame.delete(purchase.wallet);
-                logToConsole(`🎯 GUARANTEED GREEN! ${purchase.wallet.substring(0, 8)}... claimed their block ${currentBlockIndex + 1}`, 'success');
-            } else {
-                // Regular block - calculate random chance at the moment of purchase
-                blockColor = Math.random() < GREEN_CHANCE ? 'green' : 'red';
-            }
-            
-            gameBlocks[currentBlockIndex] = {
+            gameBlocks[blockIndex] = {
                 status: 'revealed',
                 color: blockColor,
                 purchase: purchase,
-                blockValue: MIN_SOL_FOR_BLOCK,
-                assignedHolder: currentBlock.assignedHolder,
-                isGuaranteedGreen: isGuaranteed
+                assignedHolder: null,
+                isGuaranteedGreen: isGuaranteed,
+                isAutoRevealed: false,
+                blockValue: MIN_SOL_FOR_BLOCK
             };
             
             if (blockColor === 'green') {
@@ -475,28 +510,26 @@ function processGameBlock(purchase) {
                     totalPurchaseAmount: purchase.solAmount,
                     signature: purchase.signature,
                     timestamp: purchase.timestamp,
-                    blockNumber: currentBlockIndex + 1,
+                    blockNumber: blockIndex + 1,
                     isMillionTokenHolder: purchase.isMillionTokenHolder,
                     holderTokens: purchase.holderTokens,
-                    isGuaranteed: isGuaranteed
+                    isGuaranteed: isGuaranteed,
+                    isAutoRevealed: false
                 });
                 
-                if (isGuaranteed) {
-                    logToConsole(`✅ GUARANTEED GREEN at block ${currentBlockIndex + 1}`, 'success');
-                } else {
-                    logToConsole(`🎯 REGULAR GREEN at block ${currentBlockIndex + 1}`, 'success');
-                }
+                logToConsole(`🎯 REGULAR GREEN at block ${blockIndex + 1}`, 'success');
             } else {
-                logToConsole(`💥 RED BLOCK at block ${currentBlockIndex + 1}`, 'info');
+                logToConsole(`💥 RED BLOCK at block ${blockIndex + 1}`, 'info');
             }
             
-            currentBlockIndex++;
             totalVolume += MIN_SOL_FOR_BLOCK;
-            
-            if (currentBlockIndex >= TOTAL_BLOCKS) {
-                completeGame();
-                break;
-            }
+        }
+        
+        // Update currentBlockIndex to the highest revealed block
+        currentBlockIndex = gameBlocks.filter(block => block.status === 'revealed').length;
+        
+        if (currentBlockIndex >= TOTAL_BLOCKS) {
+            completeGame();
         }
         
         broadcastUpdate();
@@ -524,7 +557,8 @@ function startNewGame() {
         color: null, 
         purchase: null,
         assignedHolder: null,
-        isGuaranteedGreen: false
+        isGuaranteedGreen: false,
+        isAutoRevealed: false
     }));
     currentBlockIndex = 0;
     gameCompleted = false;
@@ -537,10 +571,10 @@ function startNewGame() {
     recentHolders.clear();
     
     logToConsole(`🔄 NEW GAME STARTED! 100 blocks ready`, 'success');
-    logToConsole(`🎯 1M+ holders get guaranteed GREEN blocks assigned automatically`, 'info');
-    logToConsole(`📊 Regular blocks: ${GREEN_CHANCE * 100}% green chance (calculated at purchase time)`, 'info');
+    logToConsole(`🎯 1M+ holders get AUTO-REVEALED guaranteed GREEN blocks`, 'info');
+    logToConsole(`📊 Regular blocks: ${GREEN_CHANCE * 100}% green chance (purchase required)`, 'info');
     
-    // Assign guaranteed blocks for current 1M+ holders
+    // Assign and auto-reveal guaranteed blocks for current 1M+ holders
     assignGuaranteedGreenBlocks();
     broadcastUpdate();
 }
@@ -551,7 +585,7 @@ app.get("/", (req, res) => {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>MINESWEEPER ATH - REAL-TIME BLOCK SYSTEM</title>
+    <title>MINESWEEPER ATH - AUTO-REVEAL GUARANTEED BLOCKS</title>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <style>
@@ -665,21 +699,6 @@ app.get("/", (req, res) => {
             background: #2a2a2a;
             border-color: #666;
         }
-        .block.hidden.assigned {
-            background: linear-gradient(45deg, #1a1a1a, #004400);
-            border-color: #00ff00;
-            box-shadow: 0 0 15px #00ff0030;
-            animation: pulse 2s infinite;
-        }
-        @keyframes pulse {
-            0% { box-shadow: 0 0 5px #00ff0030; }
-            50% { box-shadow: 0 0 20px #00ff0060; }
-            100% { box-shadow: 0 0 5px #00ff0030; }
-        }
-        .block.hidden:hover {
-            background: #3a3a3a;
-            transform: scale(1.05);
-        }
         .block.revealed.green {
             background: #00ff41;
             color: #000;
@@ -744,7 +763,7 @@ app.get("/", (req, res) => {
             padding: 2px;
             font-weight: bold;
         }
-        .block-assigned {
+        .block-auto {
             font-size: 8px;
             position: absolute;
             top: 2px;
@@ -753,17 +772,6 @@ app.get("/", (req, res) => {
             color: #000;
             padding: 2px 3px;
             border-radius: 2px;
-            font-weight: bold;
-        }
-        .block-holder {
-            font-size: 9px;
-            position: absolute;
-            bottom: 15px;
-            left: 2px;
-            right: 2px;
-            text-align: center;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 1px;
             font-weight: bold;
         }
         .winners-section {
@@ -825,6 +833,10 @@ app.get("/", (req, res) => {
         .winner-item.guaranteed {
             background: rgba(0, 255, 0, 0.2);
             border-left: 3px solid #00ff00;
+        }
+        .winner-item.auto-revealed {
+            background: rgba(0, 255, 255, 0.2);
+            border-left: 3px solid #00ffff;
         }
         .previous-winner-item {
             padding: 8px;
@@ -962,18 +974,17 @@ app.get("/", (req, res) => {
     
     <div class="terminal-container">
         <div class="game-header">
-            🎮 MINESWEEPER ATH - REAL-TIME BLOCK SYSTEM 🎮
+            🎮 MINESWEEPER ATH - AUTO-REVEAL GUARANTEED BLOCKS 🎮
         </div>
         
         <div class="game-rules">
-            <div class="rules-title">🎯 REAL-TIME BLOCK SYSTEM</div>
+            <div class="rules-title">🎯 AUTO-REVEAL SYSTEM</div>
             <div class="rules-list">
-                • Each 0.1 SOL spent opens 1 block (0.5 SOL = 5 blocks, 0.72 SOL = 7 blocks)<br>
-                • 1M+ token holders: GUARANTEED GREEN blocks assigned automatically<br>
+                • 1M+ token holders: GUARANTEED GREEN blocks auto-revealed instantly (NO purchase needed)<br>
+                • Regular purchases: 0.1 SOL = 1 block, 0.5 SOL = 5 blocks, 0.72 SOL = 7 blocks<br>
                 • Regular blocks: ${GREEN_CHANCE * 100}% green chance (calculated at purchase time)<br>
-                • Guaranteed blocks show assigned wallet address clearly<br>
-                • Real-time holder validation - blocks turn red if holder loses tokens<br>
-                • Progress counts: Revealed + Valid Guaranteed green blocks
+                • Guaranteed blocks turn RED if holder drops below 1M tokens<br>
+                • Auto-revealed blocks show "AUTO" badge and assigned wallet
             </div>
         </div>
         
@@ -989,7 +1000,7 @@ app.get("/", (req, res) => {
         <div class="minesweeper-grid" id="minesweeper-grid"></div>
         
         <div class="holders-section" id="holders-section" style="display: none;">
-            <div class="holders-title">🏦 1M+ TOKEN HOLDERS - REAL-TIME STATUS 🏦</div>
+            <div class="holders-title">🏦 1M+ TOKEN HOLDERS - AUTO-REVEAL STATUS 🏦</div>
             <div class="holders-list" id="holders-list"></div>
         </div>
         
@@ -1017,13 +1028,13 @@ app.get("/", (req, res) => {
                 <div class="stat-value" id="total-green">0</div>
             </div>
             <div class="stat-card">
-                <div class="stat-label">VALID GUARANTEED</div>
-                <div class="stat-value" id="valid-guaranteed">0</div>
+                <div class="stat-label">AUTO-REVEALED</div>
+                <div class="stat-value" id="auto-revealed">0</div>
             </div>
         </div>
         
         <div class="console-section" id="console-output">
-            <div class="console-line console-info">Initializing Real-Time Block System...</div>
+            <div class="console-line console-info">Initializing Auto-Reveal System...</div>
         </div>
     </div>
 
@@ -1075,7 +1086,7 @@ app.get("/", (req, res) => {
             document.getElementById('total-volume').textContent = stats.totalVolume.toFixed(2) + ' SOL';
             document.getElementById('current-price').textContent = '\$' + stats.currentPrice.toFixed(8);
             document.getElementById('total-green').textContent = stats.totalGreenBlocks;
-            document.getElementById('valid-guaranteed').textContent = stats.validGuaranteedBlocks;
+            document.getElementById('auto-revealed').textContent = gameData.winningWallets.filter(w => w.isAutoRevealed).length;
             
             // Update blocks grid
             gameData.blocks.forEach((block, index) => {
@@ -1087,44 +1098,37 @@ app.get("/", (req, res) => {
                     blockClass += ' revealed ' + block.color;
                     if (block.isGuaranteedGreen) blockClass += ' guaranteed';
                     
-                    const shortWallet = block.purchase?.wallet ? block.purchase.wallet.substring(0, 6) + '...' + block.purchase.wallet.substring(block.purchase.wallet.length - 4) : 'Unknown';
-                    const solAmount = block.blockValue ? block.blockValue.toFixed(4) : '0.1000';
-                    
                     let blockContent = \`
                         <span class="block-number">\${index + 1}</span>
-                        <div class="block-wallet" title="\${block.purchase?.wallet || 'Unknown'}">\${shortWallet}</div>
-                        <div class="block-sol" title="\${solAmount} SOL">\${solAmount} SOL</div>
                         \${block.color === 'green' ? '🎯 GREEN' : '💥 RED'}
                     \`;
                     
-                    if (block.isGuaranteedGreen) {
-                        blockContent += \`<div class="block-guaranteed" title="Guaranteed Green Block">✅ GUARANTEED</div>\`;
+                    if (block.isAutoRevealed) {
+                        const shortWallet = block.assignedHolder ? block.assignedHolder.substring(0, 6) + '...' + block.assignedHolder.substring(block.assignedHolder.length - 4) : 'Auto';
+                        blockContent += \`
+                            <div class="block-auto" title="Auto-Revealed Guaranteed Block">AUTO</div>
+                            <div class="block-wallet" title="\${block.assignedHolder || 'Auto-revealed'}">\${shortWallet}</div>
+                            <div class="block-guaranteed" title="Guaranteed Green Block">🏦 GUARANTEED</div>
+                        \`;
+                    } else if (block.purchase) {
+                        const shortWallet = block.purchase.wallet.substring(0, 6) + '...' + block.purchase.wallet.substring(block.purchase.wallet.length - 4);
+                        const solAmount = block.blockValue ? block.blockValue.toFixed(4) : '0.1000';
+                        blockContent += \`
+                            <div class="block-wallet" title="\${block.purchase.wallet}">\${shortWallet}</div>
+                            <div class="block-sol" title="\${solAmount} SOL">\${solAmount} SOL</div>
+                        \`;
                     }
                     
                     blockElement.innerHTML = blockContent;
                     blockElement.onclick = () => {
-                        if (block.purchase?.signature) {
+                        if (block.purchase?.signature && block.purchase.signature !== 'AUTO_REVEALED') {
                             window.open(\`https://solscan.io/tx/\${block.purchase.signature}\`, '_blank');
                         }
                     };
-                    blockElement.style.cursor = 'pointer';
+                    blockElement.style.cursor = block.purchase?.signature && block.purchase.signature !== 'AUTO_REVEALED' ? 'pointer' : 'default';
                 } else {
                     blockClass += ' hidden';
-                    if (block.assignedHolder && block.isGuaranteedGreen) {
-                        blockClass += ' assigned';
-                        const shortWallet = block.assignedHolder.substring(0, 6) + '...' + block.assignedHolder.substring(block.assignedHolder.length - 4);
-                        blockElement.innerHTML = \`
-                            <span class="block-number">\${index + 1}</span>
-                            <div class="block-assigned" title="Guaranteed Green Block">🏦 GUARANTEED</div>
-                            <div class="block-holder" title="Assigned to \${block.assignedHolder}">\${shortWallet}</div>
-                            <div style="color: #00ff00; font-size: 12px; margin-top: 5px; font-weight: bold;">GREEN</div>
-                        \`;
-                    } else {
-                        blockElement.innerHTML = \`
-                            <span class="block-number">\${index + 1}</span>
-                            <div style="color: #666; font-size: 10px; margin-top: 5px;">HIDDEN</div>
-                        \`;
-                    }
+                    blockElement.innerHTML = '<span class="block-number">' + (index + 1) + '</span>';
                     blockElement.onclick = null;
                     blockElement.style.cursor = 'default';
                 }
@@ -1145,7 +1149,7 @@ app.get("/", (req, res) => {
                         </div>
                         <div class="holder-details">
                             \${holder.tokens.toLocaleString()} Tokens | \${holder.percentage.toFixed(2)}% Supply
-                            \${holder.assignedBlock ? \` | Block #\${holder.assignedBlock} \${holder.stillQualified ? '(Valid)' : '(Invalid)'}\` : ' | No block assigned'}
+                            \${holder.assignedBlock ? \` | Block #\${holder.assignedBlock} \${holder.stillQualified ? '(Auto-revealed)' : '(Invalid)'}\` : ' | No block assigned'}
                         </div>
                     </div>
                 \`).join('');
@@ -1156,15 +1160,15 @@ app.get("/", (req, res) => {
                 document.getElementById('winners-section').style.display = 'block';
                 const winnerList = document.getElementById('winner-list');
                 winnerList.innerHTML = gameData.winningWallets.map(winner => \`
-                    <div class="winner-item \${winner.isMillionTokenHolder ? 'million-holder' : ''} \${winner.isGuaranteed ? 'guaranteed' : ''}">
+                    <div class="winner-item \${winner.isMillionTokenHolder ? 'million-holder' : ''} \${winner.isGuaranteed ? 'guaranteed' : ''} \${winner.isAutoRevealed ? 'auto-revealed' : ''}">
                         <div class="winner-wallet">
                             <a href="https://solscan.io/account/\${winner.wallet}" target="_blank">
-                                \${winner.wallet}\${winner.isMillionTokenHolder ? ' 🏦' : ''}\${winner.isGuaranteed ? ' ✅' : ''}
+                                \${winner.wallet}\${winner.isMillionTokenHolder ? ' 🏦' : ''}\${winner.isAutoRevealed ? ' 🤖' : ''}
                             </a>
                         </div>
                         <div class="winner-details">
-                            Block: \${winner.blockNumber} | SOL: \${winner.solAmount.toFixed(4)}
-                            \${winner.isGuaranteed ? ' | 🎯 GUARANTEED GREEN' : ' | 🎯 REGULAR GREEN'}
+                            Block: \${winner.blockNumber} | \${winner.isAutoRevealed ? 'AUTO-REVEALED' : 'SOL: ' + winner.solAmount.toFixed(4)}
+                            \${winner.isAutoRevealed ? ' | 🎯 AUTO GUARANTEED' : (winner.isGuaranteed ? ' | 🎯 PURCHASE GUARANTEED' : ' | 🎯 REGULAR GREEN')}
                         </div>
                     </div>
                 \`).join('');
@@ -1176,10 +1180,10 @@ app.get("/", (req, res) => {
                 previousWinnerList.innerHTML = gameData.previousWinners.map(winner => \`
                     <div class="previous-winner-item">
                         <div class="winner-wallet">
-                            <a href="https://solscan.io/account/\${winner.wallet}" target="_blank">\${winner.wallet}\${winner.isMillionTokenHolder ? ' 🏦' : ''}</a>
+                            <a href="https://solscan.io/account/\${winner.wallet}" target="_blank">\${winner.wallet}\${winner.isMillionTokenHolder ? ' 🏦' : ''}\${winner.isAutoRevealed ? ' 🤖' : ''}</a>
                         </div>
                         <div class="winner-details">
-                            Block: \${winner.blockNumber} | SOL: \${winner.solAmount.toFixed(4)}
+                            Block: \${winner.blockNumber} | \${winner.isAutoRevealed ? 'AUTO' : 'SOL: ' + winner.solAmount.toFixed(4)}
                         </div>
                     </div>
                 \`).join('');
@@ -1212,10 +1216,9 @@ app.get("/api/stats", (req, res) => {
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
     logToConsole(`🚀 Server running on port ${PORT}`, 'success');
-    logToConsole(`🎮 Minesweeper ATH with Real-Time Block System Started`, 'info');
-    logToConsole(`💰 0.1 SOL = 1 block | 0.5 SOL = 5 blocks | 0.72 SOL = 7 blocks`, 'info');
-    logToConsole(`🏦 1M+ holders get guaranteed GREEN blocks`, 'info');
-    logToConsole(`🎯 Regular blocks: ${GREEN_CHANCE * 100}% green chance (calculated at purchase)`, 'info');
+    logToConsole(`🎮 Minesweeper ATH with Auto-Reveal Guaranteed Blocks Started`, 'info');
+    logToConsole(`🤖 1M+ holders: AUTO-REVEALED guaranteed GREEN blocks (NO purchase needed)`, 'info');
+    logToConsole(`💰 Regular purchases: 0.1 SOL = 1 block, ${GREEN_CHANCE * 100}% green chance`, 'info');
 });
 
 async function initialize() {
@@ -1227,7 +1230,7 @@ async function initialize() {
         
         const assigned = assignGuaranteedGreenBlocks();
         if (assigned > 0) {
-            logToConsole(`🎯 Initially assigned ${assigned} guaranteed GREEN blocks to 1M+ holders`, 'success');
+            logToConsole(`🎯 Auto-revealed ${assigned} guaranteed GREEN blocks for 1M+ holders`, 'success');
         }
     } catch (e) {
         logToConsole(`Error initializing: ${e.message}`, 'error');
