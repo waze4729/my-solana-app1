@@ -4,7 +4,7 @@ import { WebSocketServer } from 'ws';
 import http from 'http';
 
 const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
-const TOKEN_MINT = "s5gUqwdD8d6JR8k8petVFYeYjsPgbkk6BF4Ndk7Z6uy";
+const TOKEN_MINT = "8dfyMfAQKvM4ckRxNJV7Hy6EHMk2Jmjgm6VbRhWcpump";
 const POLL_INTERVAL_MS = 5000; // Increased to reduce rate limiting
 const MIN_SOL_FOR_BLOCK = 0.1;
 const TOTAL_BLOCKS = 100;
@@ -639,3 +639,4 @@ loop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
