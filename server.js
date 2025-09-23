@@ -4,7 +4,7 @@ import { WebSocketServer } from 'ws';
 import http from 'http';
 
 const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
-const TOKEN_MINT = "s5gUqwdD8d6JR8k8petVFYeYjsPgbkk6BF4Ndk7Z6uy";
+const TOKEN_MINT = "BwNDcARweCSnFz9N825p2c89pJRpoeJehRyXmbaSpump";
 const POLL_INTERVAL_MS = 2000;
 const ATH_BUY_MIN_SOL = 0.1; // Only show ATH CHAD if purchase >= 0.1 SOL
 const VOLUME_TARGET_SOL = 10; // Volume target for round rewards
