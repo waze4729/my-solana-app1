@@ -877,4 +877,3 @@ loop().catch(e => {
   logToConsole(`💥 Fatal error: ${e.message}`, 'error');
   process.exit(1);
 });
- after 10 sol volume the loading bar must stop from 0 again adn again how i make this in most simple way
