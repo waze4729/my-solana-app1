@@ -7,12 +7,17 @@ const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79
 const TOKEN_MINT = "AoedByk5vF5mxWF8jo4wWm9PXZZxFq729knEXQzhpump";
 const POLL_INTERVAL_MS = 2000;
 const ATH_BUY_MIN_SOL = 0.1; // Only show ATH CHAD if purchase >= 0.1 SOL
+const VOLUME_TARGET_SOL = 10; // Volume target for round rewards
+const ROUND_REWARD_SOL_THRESHOLD = 10; // SOL threshold for round rewards
 
 let allTimeHighPrice = 0;
 let priceHistory = [];
 let athPurchases = [];
 let fullTransactions = [];
 let consoleMessages = [];
+let totalVolume = 0; // Total volume in SOL
+let roundVolume = 0; // Current round volume
+let roundRewards = []; // Stores top ATH buyers for each round
 const connection = new Connection(RPC_ENDPOINT, { commitment: "confirmed" });
 
 const processedTransactions = new Set();
@@ -47,6 +52,10 @@ function getCurrentDashboardData() {
     .filter(p => p.isATHPurchase)
     .sort((a, b) => b.txTime - a.txTime)
     .slice(0, 20);
+  
+  const volumeProgress = Math.min(100, (roundVolume / VOLUME_TARGET_SOL) * 100);
+  const currentRound = roundRewards.length + 1;
+  
   return {
     priceHistory,
     allTimeHighPrice,
@@ -58,10 +67,16 @@ function getCurrentDashboardData() {
       uniqueBuyers: new Set(athPurchases.filter(p => p.isATHPurchase).map(p => p.wallet)).size,
       trackedTransactions: fullTransactions.length,
       lastPrice: lastPrice.price || 0,
-      priceChange24h: lastPrice.priceChange24h || 0
+      priceChange24h: lastPrice.priceChange24h || 0,
+      totalVolume,
+      roundVolume,
+      volumeProgress,
+      currentRound,
+      volumeTarget: VOLUME_TARGET_SOL
     },
     athChad,
-    recentAthPurchases
+    recentAthPurchases,
+    roundRewards
   };
 }
 
@@ -288,6 +303,54 @@ async function analyzeTokenPurchase(tx, signature, fullTxDetails = null) {
   }
 }
 
+// Function to check and update round rewards
+function updateRoundRewards(newPurchase) {
+  if (newPurchase.isATHPurchase && newPurchase.solAmount >= ATH_BUY_MIN_SOL) {
+    // Add volume from this purchase
+    roundVolume += newPurchase.solAmount;
+    totalVolume += newPurchase.solAmount;
+    
+    logToConsole(`📈 Volume update: +${newPurchase.solAmount.toFixed(4)} SOL (Round: ${roundVolume.toFixed(4)}/${VOLUME_TARGET_SOL} SOL)`, 'info');
+    
+    // Check if we reached the volume target
+    if (roundVolume >= VOLUME_TARGET_SOL) {
+      const currentRound = roundRewards.length + 1;
+      
+      // Find the top ATH buyer for this round
+      const roundAthPurchases = athPurchases.filter(p => 
+        p.isATHPurchase && 
+        p.solAmount >= ATH_BUY_MIN_SOL &&
+        p.txTime >= (roundRewards.length > 0 ? roundRewards[roundRewards.length - 1].endTime : 0)
+      );
+      
+      if (roundAthPurchases.length > 0) {
+        const topAthBuyer = roundAthPurchases.sort((a, b) => b.marketPrice - a.marketPrice)[0];
+        
+        const roundReward = {
+          round: currentRound,
+          wallet: topAthBuyer.wallet,
+          signature: topAthBuyer.signature,
+          marketPrice: topAthBuyer.marketPrice,
+          solAmount: topAthBuyer.solAmount,
+          timestamp: topAthBuyer.timestamp,
+          txTime: topAthBuyer.txTime,
+          endTime: Date.now(),
+          volumeReached: roundVolume
+        };
+        
+        roundRewards.push(roundReward);
+        
+        logToConsole(`🎉 ROUND ${currentRound} COMPLETE! Top ATH Buyer: ${topAthBuyer.wallet} at $${topAthBuyer.marketPrice.toFixed(8)}`, 'success');
+        logToConsole(`🏆 REWARD SAVED: Round ${currentRound} winner permanently stored`, 'success');
+        
+        // Reset round volume for next round
+        roundVolume = 0;
+      }
+    }
+    broadcastUpdate();
+  }
+}
+
 // ---- EXPRESS SERVER ----
 app.get("/", (req, res) => {
   res.setHeader("Content-Type", "text/html");
@@ -343,6 +406,65 @@ app.get("/", (req, res) => {
         animation: flicker 2s infinite alternate;
       }
       @keyframes flicker { 0%, 100% { opacity: 1; } 50% { opacity: 0.8; } }
+      
+      /* VOLUME PROGRESS BAR */
+      .volume-section {
+        border: 2px solid #00ffff;
+        margin: 15px 0;
+        padding: 15px;
+        background: rgba(0, 255, 255, 0.05);
+        position: relative;
+      }
+      .volume-title {
+        color: #00ffff;
+        font-weight: 700;
+        margin-bottom: 10px;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        text-align: center;
+        font-size: 14px;
+      }
+      .volume-bar-container {
+        width: 100%;
+        height: 30px;
+        background: rgba(0, 0, 0, 0.5);
+        border: 1px solid #00ffff;
+        position: relative;
+        overflow: hidden;
+      }
+      .volume-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #00ffff, #00ff41);
+        width: 0%;
+        transition: width 0.5s ease;
+        position: relative;
+      }
+      .volume-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #00ffff, #00ff41);
+        width: 0%;
+        transition: width 0.5s ease;
+        position: relative;
+      }
+      .volume-text {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: #000;
+        font-weight: 700;
+        font-size: 12px;
+        text-shadow: 0 0 3px #fff;
+        z-index: 2;
+      }
+      .volume-stats {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 10px;
+        font-size: 11px;
+        color: #00ffff;
+      }
+      
       .section {
         border: 1px solid #00ff41;
         margin: 15px 0;
@@ -358,6 +480,37 @@ app.get("/", (req, res) => {
         border-bottom: 1px dashed #ff6b6b;
         padding-bottom: 5px;
       }
+      
+      /* ROUND REWARDS SECTION */
+      .round-rewards-section {
+        border: 2px solid #ff00ff;
+        margin: 15px 0;
+        padding: 15px;
+        background: rgba(255, 0, 255, 0.05);
+      }
+      .round-reward {
+        margin: 10px 0;
+        padding: 10px;
+        background: rgba(255, 0, 255, 0.1);
+        border-left: 3px solid #ff00ff;
+      }
+      .round-number {
+        color: #ff00ff;
+        font-weight: 700;
+        font-size: 14px;
+      }
+      .reward-wallet, .reward-signature {
+        word-break: break-all;
+        margin: 5px 0;
+      }
+      .reward-wallet a, .reward-signature a {
+        color: #00ffff;
+        text-decoration: none;
+      }
+      .reward-wallet a:hover, .reward-signature a:hover {
+        text-decoration: underline;
+      }
+      
       .ath-hero {
         background: rgba(255, 107, 107, 0.1);
         border: 2px solid #ff6b6b;
@@ -387,6 +540,13 @@ app.get("/", (req, res) => {
       .buyer-entry:nth-child(odd) { background: rgba(0, 255, 65, 0.05); }
       .buyer-rank { color: #ffff00; font-weight: 700; margin-right: 8px; }
       .buyer-wallet { color: #00ffff; font-weight: 700; word-break: break-all; }
+      .buyer-wallet a, .buyer-signature a {
+        color: inherit;
+        text-decoration: none;
+      }
+      .buyer-wallet a:hover, .buyer-signature a:hover {
+        text-decoration: underline;
+      }
       .buyer-signature { color: #ff6b6b; font-size: 9px; word-break: break-all; margin: 3px 0; font-family: 'JetBrains Mono', monospace; }
       .buyer-stats { color: #00ff41; font-size: 10px; margin-top: 3px; }
       .usd-value { color: #ffff00; font-weight: 700; }
@@ -457,6 +617,29 @@ app.get("/", (req, res) => {
 [BACKROOMS LEVEL ∞] // TERMINAL ACCESS GRANTED //  MODE ACTIVE
 TOKEN: ${TOKEN_MINT}
       </div>
+      
+      <!-- VOLUME PROGRESS BAR -->
+      <div class="volume-section">
+        <div class="volume-title">🎯 VOLUME TARGET PROGRESS - ROUND <span id="current-round">1</span></div>
+        <div class="volume-bar-container">
+          <div class="volume-bar-fill" id="volume-bar"></div>
+          <div class="volume-text" id="volume-text">0.00/10.00 SOL (0%)</div>
+        </div>
+        <div class="volume-stats">
+          <span>Total Volume: <span id="total-volume">0.00</span> SOL</span>
+          <span>Round Volume: <span id="round-volume">0.00</span> SOL</span>
+          <span>Target: 10.00 SOL</span>
+        </div>
+      </div>
+      
+      <!-- ROUND REWARDS SECTION -->
+      <div class="round-rewards-section" id="round-rewards-section" style="display: none;">
+        <div class="section-title">🏆 ROUND REWARDS - PERMANENTLY SAVED WINNERS</div>
+        <div id="round-rewards-list">
+          <!-- Round rewards will be populated here -->
+        </div>
+      </div>
+      
       <!-- ATH HERO SECTION -->
       <div id="ath-hero-section" style="display: none;">
         <div class="ath-hero">
@@ -469,6 +652,7 @@ TOKEN: ${TOKEN_MINT}
           </div>
         </div>
       </div>
+      
       <!-- RECENT ATH PURCHASES -->
       <div class="section">
         <div class="section-title">📋 RECENT ATH TRANSACTIONS (ALL)</div>
@@ -478,6 +662,7 @@ TOKEN: ${TOKEN_MINT}
           </div>
         </div>
       </div>
+      
       <!-- LIVE CONSOLE -->
       <div class="section">
         <div class="section-title">💻 LIVE CONSOLE OUTPUT</div>
@@ -493,9 +678,10 @@ TOKEN: ${TOKEN_MINT}
           </div>
         </div>
       </div>
+      
       <div class="footer">
         ═══════════════════════════════════════════════════════════════════════<br>
-        TOP TERMINAL // DEV: SALAM47 //  ATH TRACKER v2.0<br>
+        TOP TERMINAL // DEV: SALAM47 //  ATH TRACKER v2.0 // VOLUME ROUNDS ACTIVATED<br>
         ═══════════════════════════════════════════════════════════════════════
       </div>
     </div>
@@ -521,19 +707,57 @@ TOKEN: ${TOKEN_MINT}
         };
         ws.onerror = (error) => {};
       }
+      
       function updateDashboard(data) {
-        const { athChad, recentAthPurchases, consoleMessages } = data;
+        const { athChad, recentAthPurchases, consoleMessages, stats, roundRewards } = data;
+        
+        // Update Volume Progress Bar
+        document.getElementById('current-round').textContent = stats.currentRound;
+        document.getElementById('volume-bar').style.width = stats.volumeProgress + '%';
+        document.getElementById('volume-text').textContent = \`\${stats.roundVolume.toFixed(2)}/\${stats.volumeTarget.toFixed(2)} SOL (\${stats.volumeProgress.toFixed(1)}%)\`;
+        document.getElementById('total-volume').textContent = stats.totalVolume.toFixed(2);
+        document.getElementById('round-volume').textContent = stats.roundVolume.toFixed(2);
+        
+        // Update Round Rewards Section
+        const rewardsSection = document.getElementById('round-rewards-section');
+        const rewardsList = document.getElementById('round-rewards-list');
+        if (roundRewards.length > 0) {
+          rewardsSection.style.display = 'block';
+          let rewardsHtml = '';
+          roundRewards.forEach((reward, index) => {
+            rewardsHtml += \`
+              <div class="round-reward">
+                <div class="round-number">ROUND \${reward.round} WINNER</div>
+                <div class="reward-wallet">
+                  🏆 Wallet: <a href="https://solscan.io/account/\${reward.wallet}" target="_blank">\${reward.wallet}</a>
+                </div>
+                <div class="reward-signature">
+                  📝 TX: <a href="https://solscan.io/tx/\${reward.signature}" target="_blank">\${reward.signature}</a>
+                </div>
+                <div class="buyer-stats">
+                  Price: $\${reward.marketPrice.toFixed(8)} | SOL: \${reward.solAmount.toFixed(4)} | 
+                  Volume: \${reward.volumeReached.toFixed(2)} SOL | Time: \${secondsAgo(reward.txTime)}
+                </div>
+              </div>
+            \`;
+          });
+          rewardsList.innerHTML = rewardsHtml;
+        } else {
+          rewardsSection.style.display = 'none';
+        }
+        
         // Update ATH HERO section (only if solAmount >= ATH_BUY_MIN_SOL)
         const heroSection = document.getElementById('ath-hero-section');
         if (athChad) {
           heroSection.style.display = 'block';
-          document.getElementById('hero-wallet').textContent = athChad.wallet;
+          document.getElementById('hero-wallet').innerHTML = \`<a href="https://solscan.io/account/\${athChad.wallet}" target="_blank">\${athChad.wallet}</a>\`;
           document.getElementById('hero-price').textContent = \`$\${athChad.marketPrice.toFixed(8)}\`;
           document.getElementById('hero-time').textContent = \`\${athChad.timestamp} (\${secondsAgo(athChad.txTime)})\`;
-          document.getElementById('hero-signature').textContent = athChad.signature;
+          document.getElementById('hero-signature').innerHTML = \`<a href="https://solscan.io/tx/\${athChad.signature}" target="_blank">\${athChad.signature}</a>\`;
         } else {
           heroSection.style.display = 'none';
         }
+        
         // Update RECENT ATH PURCHASES (show all, not just >=0.1 SOL)
         let recentHtml = '';
         if (recentAthPurchases.length === 0) {
@@ -545,9 +769,9 @@ TOKEN: ${TOKEN_MINT}
               <div class="buyer-entry">
                 <div>
                   <span class="buyer-rank">#\${i + 1}</span>
-                  <span class="buyer-wallet">\${purchase.wallet}</span>
+                  <span class="buyer-wallet"><a href="https://solscan.io/account/\${purchase.wallet}" target="_blank">\${purchase.wallet}</a></span>
                 </div>
-                <div class="buyer-signature">\${purchase.signature}</div>
+                <div class="buyer-signature"><a href="https://solscan.io/tx/\${purchase.signature}" target="_blank">\${purchase.signature}</a></div>
                 <div class="buyer-stats">
                   SOL: \${purchase.solAmount.toFixed(6)} | 
                   Value: <span class="usd-value">$\${usdValue.toFixed(8)}</span> | 
@@ -562,6 +786,7 @@ TOKEN: ${TOKEN_MINT}
           });
         }
         document.getElementById('recent-purchases-list').innerHTML = recentHtml;
+        
         // Update console
         const consoleOutput = document.getElementById('console-output');
         consoleOutput.innerHTML = '';
@@ -573,6 +798,7 @@ TOKEN: ${TOKEN_MINT}
         });
         consoleOutput.scrollTop = consoleOutput.scrollHeight;
       }
+      
       function secondsAgo(ts) {
         const now = Date.now();
         const diff = Math.floor((now - ts) / 1000);
@@ -580,6 +806,7 @@ TOKEN: ${TOKEN_MINT}
         if (diff < 3600) return \`\${Math.floor(diff/60)}m \${diff%60}s ago\`;
         return \`\${Math.floor(diff/3600)}h \${Math.floor((diff%3600)/60)}m ago\`;
       }
+      
       connectWebSocket();
     </script>
   </body>
@@ -596,6 +823,7 @@ server.listen(PORT, () => {
   logToConsole(`🚀 Server running on http://localhost:${PORT}`, 'success');
   logToConsole(`📊 Monitoring token: ${TOKEN_MINT}`, 'info');
   logToConsole(`⚡ WebSocket server initialized`, 'info');
+  logToConsole(`🎯 Volume Round System Activated - Target: ${VOLUME_TARGET_SOL} SOL per round`, 'success');
 });
 
 // ---- BACKGROUND DATA LOOP ----
@@ -619,6 +847,10 @@ async function loop() {
             purchase.marketPrice = currentPriceData.price;
             purchase.isATHPurchase = currentPriceData.isNewATH;
             athPurchases.push(purchase);
+            
+            // Update volume and check for round rewards
+            updateRoundRewards(purchase);
+            
             if (purchase.isATHPurchase) {
               logToConsole(`🎯 ATH PURCHASE! Wallet: ${purchase.wallet}, Price: ${currentPriceData.price.toFixed(8)}`, 'success');
             }
@@ -644,4 +876,4 @@ async function loop() {
 loop().catch(e => {
   logToConsole(`💥 Fatal error: ${e.message}`, 'error');
   process.exit(1);
-}); 
+});
