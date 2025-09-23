@@ -10,7 +10,7 @@ const MIN_SOL_FOR_BLOCK = 0.1;
 const TOTAL_BLOCKS = 100;
 const MIN_TOKENS_FOR_GUARANTEED_GREEN = 1000000;
 const GREEN_CHANCE = 0.33;
-const MAX_TOKENS_FOR_GUARANTEED_GREEN = 3000000000; 
+const MAX_TOKENS_FOR_GUARANTEED_GREEN = 3000000; 
 // Simple in-memory storage
 let allTimeHighPrice = 0;
 let currentPrice = 0;
@@ -1349,6 +1349,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
