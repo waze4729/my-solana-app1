@@ -996,11 +996,11 @@ app.get("/", (req, res) => {
         </div>
         
         <div class="game-rules">
-            <div class="rules-title">🎯 AUTO-REVEAL SYSTEM</div>
+            <div class="rules-title">🎯 BLOCK REWARDS</div>
             <div class="rules-list">
                 • 1M+ token holders: GUARANTEED GREEN blocks auto-revealed instantly (NO purchase needed)<br>
-                • Regular purchases: 0.1 SOL = 1 block, 0.5 SOL = 5 blocks, 0.72 SOL = 7 blocks<br>
-                • Regular blocks: ${GREEN_CHANCE * 100}% green chance (calculated at purchase time)<br>
+                • Regular purchases: 0.1 SOL = 1 block<br>
+                • 1 GREEM BLOCK = 1% CREATOR FEE REWARD<br>
                 • Guaranteed blocks turn RED if holder drops below 1M tokens<br>
                 • Auto-revealed blocks show "AUTO" badge and assigned wallet
             </div>
@@ -1299,6 +1299,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
