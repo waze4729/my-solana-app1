@@ -5,11 +5,11 @@ import http from 'http';
 
 const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
 const TOKEN_MINT = "AoedByk5vF5mxWF8jo4wWm9PXZZxFq729knEXQzhpump";
-const POLL_INTERVAL_MS = 5000; // Increased to reduce rate limiting
+const POLL_INTERVAL_MS = 5000;
 const MIN_SOL_FOR_BLOCK = 0.1;
 const TOTAL_BLOCKS = 100;
-const MIN_TOKENS_FOR_GUARANTEED_GREEN = 1000000; // 1M tokens
-const GREEN_CHANCE = 0.33; // 33% chance for green
+const MIN_TOKENS_FOR_GUARANTEED_GREEN = 1000000;
+const GREEN_CHANCE = 0.33;
 
 let allTimeHighPrice = 0;
 let priceHistory = [];
@@ -112,7 +112,6 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
         try {
             const response = await fetch(url, options);
             if (response.status === 429) {
-                // Rate limited - wait with exponential backoff
                 const waitTime = delay * Math.pow(2, i);
                 logToConsole(`Rate limited, waiting ${waitTime}ms before retry ${i + 1}/${retries}`, 'info');
                 await new Promise(resolve => setTimeout(resolve, waitTime));
@@ -161,16 +160,13 @@ async function fetchMajorHolders() {
         
         for (const account of largestAccounts.value) {
             try {
-                // Get token account info to find the owner
                 const accountInfo = await connection.getAccountInfo(account.address);
                 if (!accountInfo) continue;
                 
-                // Token account layout: mint (32) + owner (32) + ...
                 if (accountInfo.data.length >= 64) {
                     const ownerPubkey = new PublicKey(accountInfo.data.subarray(32, 64));
                     const owner = ownerPubkey.toString();
                     
-                    // Get token balance
                     const balanceInfo = await connection.getTokenAccountBalance(account.address);
                     if (balanceInfo && balanceInfo.value) {
                         const tokens = balanceInfo.value.uiAmount || 0;
@@ -191,25 +187,28 @@ async function fetchMajorHolders() {
             } catch (e) {
                 logToConsole(`Error processing account ${account.address}: ${e.message}`, 'error');
             }
-            await new Promise(r => setTimeout(r, 200)); // Rate limiting
+            await new Promise(r => setTimeout(r, 200));
         }
         
         majorHolders = holders;
         logToConsole(`📊 Found ${millionTokenHolderCount} holders with 1M+ tokens`, 'success');
+        return holders;
         
     } catch (e) {
         logToConsole(`Error fetching major holders: ${e.message}`, 'error');
+        return new Map();
     }
 }
 
 async function fetchTokenPrice(mintAddress) {
     try {
-        const res = await fetchWithRetry(`https://api.jup.ag/price/v3?ids=${mintAddress}`);
+        // Use a more reliable price API with fallback
+        const res = await fetchWithRetry(`https://api.dexscreener.com/latest/dex/tokens/${mintAddress}`);
         const data = await res.json();
         
-        if (data.data && data.data[mintAddress]) {
-            const tokenData = data.data[mintAddress];
-            const price = tokenData.price || 0;
+        if (data.pairs && data.pairs.length > 0) {
+            const pair = data.pairs[0];
+            const price = parseFloat(pair.priceUsd) || 0;
             const isNewATH = price > allTimeHighPrice;
             
             if (isNewATH) {
@@ -221,7 +220,7 @@ async function fetchTokenPrice(mintAddress) {
                 price, 
                 timestamp: Date.now(), 
                 isNewATH,
-                priceChange24h: tokenData.priceChange24h || 0
+                priceChange24h: pair.priceChange?.h24 || 0
             };
         }
         return null;
@@ -277,11 +276,9 @@ function calculateSolSpent(tx) {
         const meta = tx.meta;
         const accountKeys = tx.transaction.message.accountKeys || [];
         
-        // Find the buyer by looking for the account that spent SOL
         let solSpent = 0;
         let buyer = null;
         
-        // Method 1: Check fee payer first
         const feePayerIndex = 0;
         if (meta.preBalances && meta.postBalances && meta.preBalances.length > feePayerIndex) {
             const preBalance = meta.preBalances[feePayerIndex] / LAMPORTS_PER_SOL;
@@ -289,19 +286,17 @@ function calculateSolSpent(tx) {
             const fee = meta.fee / LAMPORTS_PER_SOL;
             const spent = preBalance - postBalance - fee;
             
-            if (spent > 0.001) { // Minimum threshold to avoid false positives
+            if (spent > 0.001) {
                 solSpent = spent;
                 buyer = accountKeys[feePayerIndex]?.pubkey?.toString() || null;
             }
         }
         
-        // Method 2: Check all accounts for significant SOL decreases
         if (solSpent === 0) {
             for (let i = 0; i < accountKeys.length; i++) {
                 if (meta.preBalances?.[i] && meta.postBalances?.[i]) {
                     const balanceChange = (meta.postBalances[i] - meta.preBalances[i]) / LAMPORTS_PER_SOL;
                     
-                    // Look for significant SOL outflow (more than just fees)
                     if (balanceChange < -0.005) {
                         solSpent = Math.abs(balanceChange);
                         buyer = accountKeys[i]?.pubkey?.toString() || buyer;
@@ -311,10 +306,7 @@ function calculateSolSpent(tx) {
             }
         }
         
-        // Method 3: If still no SOL spent detected, use token transfer as indicator
         if (solSpent === 0 && meta.postTokenBalances) {
-            // If there are token transfers but no SOL spent, it might be a transfer or other operation
-            // Set a minimum value based on transaction fee
             solSpent = meta.fee ? meta.fee / LAMPORTS_PER_SOL : 0.0001;
             buyer = accountKeys[0]?.pubkey?.toString() || null;
         }
@@ -365,7 +357,7 @@ async function monitorNewTokenTransactions() {
                     processedTransactions.add(sig.signature);
                 }
                 
-                await new Promise(r => setTimeout(r, 500)); // Rate limiting
+                await new Promise(r => setTimeout(r, 500));
             } catch (e) {
                 logToConsole(`Error processing transaction ${sig.signature}: ${e.message}`, 'error');
                 processedTransactions.add(sig.signature);
@@ -517,6 +509,19 @@ function processGameBlock(purchase) {
     }
 }
 
+function assignGuaranteedGreenBlocks() {
+    const millionHolders = Array.from(majorHolders.entries())
+        .filter(([wallet, data]) => data.tokens >= MIN_TOKENS_FOR_GUARANTEED_GREEN);
+    
+    if (millionHolders.length === 0) {
+        logToConsole(`🔄 No 1M+ holders found yet, will retry in 5 seconds...`, 'info');
+        setTimeout(assignGuaranteedGreenBlocks, 5000);
+        return;
+    }
+    
+    logToConsole(`🎯 Assigned ${millionHolders.length} guaranteed green blocks for 1M+ token holders`, 'success');
+}
+
 function startNewGame() {
     gameBlocks = Array(TOTAL_BLOCKS).fill(null).map(() => ({ 
         status: 'hidden', 
@@ -526,6 +531,9 @@ function startNewGame() {
     currentBlockIndex = 0;
     gameCompleted = false;
     winningWallets = [];
+    
+    // Assign guaranteed green blocks for 1M+ holders at game start
+    assignGuaranteedGreenBlocks();
     
     logToConsole(`🔄 NEW GAME STARTED! 100 blocks ready`, 'success');
     logToConsole(`🎯 1M+ token holders get 1 guaranteed green block per game`, 'info');
@@ -887,7 +895,9 @@ app.get("/", (req, res) => {
                 • 1M+ token holders get 1 GUARANTEED green block per game<br>
                 • Regular blocks: 33% green chance, 67% red chance<br>
                 • Green blocks = WIN! Red blocks = LOSE<br>
-                • Game completes when all 100 blocks are opened
+                • Game completes when all 100 blocks are opened<br>
+                • 1M+ holders: automatically assigned green block at game start<br>
+                • If no holder data, system retries every 5 seconds
             </div>
         </div>
         
@@ -1110,7 +1120,7 @@ app.get("/api/stats", (req, res) => {
     res.json(getCurrentDashboardData());
 });
 
-const PORT = process.env.PORT || 1000;
+const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
     logToConsole(`🚀 Server running on port ${PORT}`, 'success');
     logToConsole(`🎮 Minesweeper ATH Game Started - ${TOTAL_BLOCKS} blocks`, 'info');
