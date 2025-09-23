@@ -5,7 +5,7 @@ import http from 'http';
 
 const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
 const TOKEN_MINT = "4LK277DuJkKta8j41sXHdnvhmH3LLYwMjezXJE6jpump";
-const POLL_INTERVAL_MS = 1369;
+const POLL_INTERVAL_MS = 2369;
 const MIN_SOL_FOR_BLOCK = 0.1;
 const TOTAL_BLOCKS = 100;
 const MIN_TOKENS_FOR_GUARANTEED_GREEN = 1000000;
@@ -76,16 +76,16 @@ function getCurrentDashboardData() {
     const totalGreenBlocks = revealedGreenBlocks + guaranteedGreenBlocks;
     const progress = Math.min(100, (totalOccupiedBlocks / TOTAL_BLOCKS) * 100); // FIXED: Use totalOccupiedBlocks instead of totalGreenBlocks
     
-    const millionTokenHolders = Array.from(majorHolders.entries())
-        .filter(([wallet, data]) => data.tokens >= MIN_TOKENS_FOR_GUARANTEED_GREEN)
-        .map(([wallet, data]) => ({
-            wallet,
-            tokens: data.tokens,
-            percentage: data.percentage,
-            hasGuaranteedBlock: assignedHoldersThisGame.has(wallet),
-            assignedBlock: getAssignedBlockForHolder(wallet),
-            stillQualified: isHolderStillQualified(wallet)
-        }));
+const millionTokenHolders = Array.from(majorHolders.entries())
+    .filter(([wallet, data]) => data.tokens >= MIN_TOKENS_FOR_GUARANTEED_GREEN && data.tokens <= 3000000000)
+    .map(([wallet, data]) => ({
+        wallet,
+        tokens: data.tokens,
+        percentage: data.percentage,
+        hasGuaranteedBlock: assignedHoldersThisGame.has(wallet),
+        assignedBlock: getAssignedBlockForHolder(wallet),
+        stillQualified: isHolderStillQualified(wallet)
+    }));
     
     return {
         currentPrice,
@@ -1291,3 +1291,4 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
