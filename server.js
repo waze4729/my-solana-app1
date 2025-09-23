@@ -10,7 +10,7 @@ const MIN_SOL_FOR_BLOCK = 0.1;
 const TOTAL_BLOCKS = 100;
 const MIN_TOKENS_FOR_GUARANTEED_GREEN = 1000000;
 const GREEN_CHANCE = 0.33;
-
+const MAX_TOKENS_FOR_GUARANTEED_GREEN = 3000000000; 
 // Simple in-memory storage
 let allTimeHighPrice = 0;
 let currentPrice = 0;
@@ -126,9 +126,10 @@ const millionTokenHolders = Array.from(majorHolders.entries())
 
 function isHolderStillQualified(wallet) {
     const holderData = majorHolders.get(wallet);
-    return holderData && holderData.tokens >= MIN_TOKENS_FOR_GUARANTEED_GREEN;
+    return holderData && 
+           holderData.tokens >= MIN_TOKENS_FOR_GUARANTEED_GREEN && 
+           holderData.tokens <= MAX_TOKENS_FOR_GUARANTEED_GREEN; // ADD THIS CONDITION
 }
-
 function getAssignedBlockForHolder(wallet) {
     for (let i = 0; i < gameBlocks.length; i++) {
         if (gameBlocks[i].assignedHolder === wallet && gameBlocks[i].isGuaranteedGreen) {
@@ -243,7 +244,8 @@ async function fetchTokenPrice() {
 
 function assignGuaranteedGreenBlocks() {
     const millionHolders = Array.from(majorHolders.entries())
-        .filter(([wallet, data]) => data.tokens >= MIN_TOKENS_FOR_GUARANTEED_GREEN);
+        .filter(([wallet, data]) => data.tokens >= MIN_TOKENS_FOR_GUARANTEED_GREEN && 
+                                    data.tokens <= MAX_TOKENS_FOR_GUARANTEED_GREEN); // ADD THIS CONDITION
     
     let newlyAssigned = 0;
     let autoRevealed = 0;
@@ -1291,4 +1293,5 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
