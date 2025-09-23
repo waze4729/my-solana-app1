@@ -22,7 +22,7 @@ let bossHealth = 1000;
 let bossMaxHealth = 1000;
 let bossPower = 100;
 let bossLevel = 1;
-let playerCharacters = new Map(); // wallet -> character data
+let playerCharacters = new Map();
 let gameHistory = [];
 let totalDamageDealt = 0;
 let totalBossKills = 0;
@@ -30,7 +30,7 @@ let currentBossName = "PRICE DRAGON";
 let bossPhase = "NORMAL";
 
 // PERMANENT ATH PLAYER STORAGE
-let permanentAthPlayers = new Map(); // wallet -> { bestPurchase, character }
+let permanentAthPlayers = new Map();
 
 const processedTransactions = new Set();
 const recentHolders = new Set();
@@ -57,7 +57,6 @@ function broadcastUpdate() {
 function getCurrentGameData() {
   const lastPrice = priceHistory.length > 0 ? priceHistory[priceHistory.length - 1] : { price: 0, priceChange24h: 0 };
   
-  // Get ALL ATH players (permanent storage)
   const allAthPlayers = Array.from(permanentAthPlayers.entries())
     .map(([wallet, data]) => ({
       wallet,
@@ -73,7 +72,6 @@ function getCurrentGameData() {
     .sort((a, b) => b.txTime - a.txTime)
     .slice(0, 20);
 
-  // Get top players by damage
   const topPlayers = Array.from(playerCharacters.entries())
     .sort((a, b) => b[1].totalDamage - a[1].totalDamage)
     .slice(0, 10)
@@ -86,7 +84,6 @@ function getCurrentGameData() {
     fullTransactions,
     consoleMessages,
     
-    // Game Data
     gameState: {
       bossHealth,
       bossMaxHealth,
@@ -102,7 +99,6 @@ function getCurrentGameData() {
     topPlayers,
     gameHistory: gameHistory.slice(-50),
     
-    // PERMANENT ATH DATA
     permanentAthPlayers: allAthPlayers,
     athChad,
     recentAthPurchases,
@@ -127,7 +123,7 @@ function logToConsole(message, type = 'info') {
     type,
     id: Date.now() + Math.random()
   };
-  console.log(`[${timestamp}] ${type.toUpperCase()}: ${message}`);
+  console.log("[" + timestamp + "] " + type.toUpperCase() + ": " + message);
   consoleMessages.push(logEntry);
   if (consoleMessages.length > 500) consoleMessages.shift();
   broadcastUpdate();
@@ -136,12 +132,11 @@ function logToConsole(message, type = 'info') {
 function secondsAgo(ts) {
   const now = Date.now();
   const diff = Math.floor((now - ts) / 1000);
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff/60)}m ${diff%60}s ago`;
-  return `${Math.floor(diff/3600)}h ${Math.floor((diff%3600)/60)}m ago`;
+  if (diff < 60) return diff + "s ago";
+  if (diff < 3600) return Math.floor(diff/60) + "m " + (diff%60) + "s ago";
+  return Math.floor(diff/3600) + "h " + Math.floor((diff%3600)/60) + "m ago";
 }
 
-// MMORPG Game Functions
 function createPlayerCharacter(wallet, initialPurchase) {
   const character = {
     wallet: wallet,
@@ -158,7 +153,6 @@ function createPlayerCharacter(wallet, initialPurchase) {
     title: "Novice Warrior"
   };
   
-  // Give bonus based on purchase size
   if (initialPurchase.solAmount > 1) {
     character.power += Math.floor(initialPurchase.solAmount);
     character.title = "Whale Warrior";
@@ -193,14 +187,14 @@ function bossAttack() {
       target.health = target.maxHealth;
       gameHistory.push({
         type: "BOSS_KILL",
-        message: `💀 ${currentBossName} defeated ${target.wallet}!`,
+        message: "💀 " + currentBossName + " defeated " + target.wallet + "!",
         timestamp: Date.now()
       });
     }
     
     gameHistory.push({
       type: "BOSS_ATTACK",
-      message: `⚡ ${currentBossName} hits ${target.wallet} for ${damage} damage!`,
+      message: "⚡ " + currentBossName + " hits " + target.wallet + " for " + damage + " damage!",
       timestamp: Date.now()
     });
   }
@@ -216,7 +210,7 @@ function updateBossPhase() {
     bossPower *= 1.5;
     gameHistory.push({
       type: "BOSS_PHASE",
-      message: `🔥 ${currentBossName} becomes ENRAGED! Power increased!`,
+      message: "🔥 " + currentBossName + " becomes ENRAGED! Power increased!",
       timestamp: Date.now()
     });
   } else if (healthPercent <= 50 && bossPhase === "NORMAL") {
@@ -224,7 +218,7 @@ function updateBossPhase() {
     bossPower *= 1.2;
     gameHistory.push({
       type: "BOSS_PHASE",
-      message: `😠 ${currentBossName} is getting ANGRY!`,
+      message: "😠 " + currentBossName + " is getting ANGRY!",
       timestamp: Date.now()
     });
   }
@@ -235,7 +229,7 @@ function checkBossDefeat() {
     totalBossKills++;
     gameHistory.push({
       type: "BOSS_DEFEAT",
-      message: `🎉 ${currentBossName} has been DEFEATED! Players victorious!`,
+      message: "🎉 " + currentBossName + " has been DEFEATED! Players victorious!",
       timestamp: Date.now()
     });
     
@@ -249,9 +243,9 @@ function checkBossDefeat() {
       priceHistory[priceHistory.length - 1].price - priceHistory[0].price : 0;
     
     if (priceChange > 0) {
-      currentBossName = `BULL MARKET DRAGON Lv${bossLevel}`;
+      currentBossName = "BULL MARKET DRAGON Lv" + bossLevel;
     } else {
-      currentBossName = `BEAR MARKET BEAST Lv${bossLevel}`;
+      currentBossName = "BEAR MARKET BEAST Lv" + bossLevel;
     }
     
     Array.from(playerCharacters.values()).forEach(player => {
@@ -268,14 +262,12 @@ function checkBossDefeat() {
   return false;
 }
 
-// FIXED PRICE FETCHING WITH BETTER ACCURACY
 async function fetchTokenPrice(mintAddress) {
   try {
-    // Try multiple price sources for accuracy
     const sources = [
-      `https://api.dexscreener.com/latest/dex/tokens/${mintAddress}`,
-      `https://price.jup.ag/v4/price?ids=${mintAddress}`,
-      `https://api.geckoterminal.com/api/v2/simple/networks/solana/token_price/${mintAddress}`
+      "https://api.dexscreener.com/latest/dex/tokens/" + mintAddress,
+      "https://price.jup.ag/v4/price?ids=" + mintAddress,
+      "https://api.geckoterminal.com/api/v2/simple/networks/solana/token_price/" + mintAddress
     ];
     
     let price = 0;
@@ -287,7 +279,6 @@ async function fetchTokenPrice(mintAddress) {
         if (res.ok) {
           const data = await res.json();
           
-          // DexScreener
           if (source.includes('dexscreener')) {
             if (data.pairs && data.pairs.length > 0) {
               price = parseFloat(data.pairs[0].priceUsd) || 0;
@@ -295,15 +286,13 @@ async function fetchTokenPrice(mintAddress) {
               if (price > 0) break;
             }
           }
-          // Jupiter
           else if (source.includes('jup.ag')) {
             if (data.data && data.data[mintAddress]) {
               price = parseFloat(data.data[mintAddress].price) || 0;
-              priceChange24h = 0; // Jupiter doesn't provide 24h change simply
+              priceChange24h = 0;
               if (price > 0) break;
             }
           }
-          // GeckoTerminal
           else if (source.includes('geckoterminal')) {
             if (data.data && data.data.attributes) {
               price = parseFloat(data.data.attributes.token_prices[mintAddress]) || 0;
@@ -313,14 +302,12 @@ async function fetchTokenPrice(mintAddress) {
           }
         }
       } catch (e) {
-        // Try next source
         continue;
       }
     }
     
     if (price === 0) {
-      // Fallback to original method
-      const res = await fetch(`https://api.jup.ag/tokens/v3/price?ids=${mintAddress}`);
+      const res = await fetch("https://api.jup.ag/tokens/v3/price?ids=" + mintAddress);
       if (res.ok) {
         const data = await res.json();
         if (data.data && data.data[mintAddress]) {
@@ -332,17 +319,17 @@ async function fetchTokenPrice(mintAddress) {
     const isNewATH = price > allTimeHighPrice;
     if (isNewATH) {
       allTimeHighPrice = price;
-      logToConsole(`🚀 NEW ALL-TIME HIGH: $${price.toFixed(8)}`, 'success');
+      logToConsole("🚀 NEW ALL-TIME HIGH: $" + price.toFixed(8), 'success');
       
       bossPower += 10;
       gameHistory.push({
         type: "ATH_REACHED",
-        message: `📈 ATH REACHED! ${currentBossName} grows stronger!`,
+        message: "📈 ATH REACHED! " + currentBossName + " grows stronger!",
         timestamp: Date.now()
       });
     }
     
-    logToConsole(`Price fetched: $${price.toFixed(8)} (24h: ${priceChange24h.toFixed(2)}%)`, 'info');
+    logToConsole("Price fetched: $" + price.toFixed(8) + " (24h: " + priceChange24h.toFixed(2) + "%)", 'info');
     broadcastUpdate();
     
     return { 
@@ -353,12 +340,11 @@ async function fetchTokenPrice(mintAddress) {
     };
     
   } catch (e) {
-    logToConsole(`Error fetching token price: ${e.message}`, 'error');
+    logToConsole("Error fetching token price: " + e.message, 'error');
     return null;
   }
 }
 
-// FIXED TRANSACTION ANALYSIS WITH BETTER SOL CALCULATION
 async function analyzeTokenPurchase(tx, signature, fullTxDetails = null) {
   try {
     if (!tx?.meta || !tx?.transaction) return null;
@@ -366,7 +352,6 @@ async function analyzeTokenPurchase(tx, signature, fullTxDetails = null) {
     const postTokenBalances = tx.meta?.postTokenBalances || [];
     const preTokenBalances = tx.meta?.preTokenBalances || [];
     
-    // Find token transfers for our mint
     const tokenTransfers = postTokenBalances.filter(balance =>
       balance?.mint === TOKEN_MINT &&
       balance?.uiTokenAmount?.uiAmount > 0
@@ -383,7 +368,6 @@ async function analyzeTokenPurchase(tx, signature, fullTxDetails = null) {
       const wallet = transfer.owner || 'unknown';
       if (recentHolders.has(wallet)) continue;
       
-      // Calculate exact token amount received
       const preBalance = preTokenBalances.find(b => 
         b.mint === TOKEN_MINT && b.owner === wallet
       )?.uiTokenAmount?.uiAmount || 0;
@@ -422,12 +406,11 @@ async function analyzeTokenPurchase(tx, signature, fullTxDetails = null) {
     return purchases.length > 0 ? purchases : null;
     
   } catch (e) {
-    logToConsole(`Error analyzing purchase: ${e.message}`, 'error');
+    logToConsole("Error analyzing purchase: " + e.message, 'error');
     return null;
   }
 }
 
-// IMPROVED SOL SPENT CALCULATION
 function calculateSolSpent(tx) {
   try {
     if (!tx?.meta || !tx.transaction) return { solSpent: 0, buyer: null };
@@ -435,7 +418,6 @@ function calculateSolSpent(tx) {
     const meta = tx.meta;
     const accountKeys = tx.transaction.message.accountKeys || [];
     
-    // Method 1: Check fee payer balance change (most accurate for buys)
     const feePayerIndex = 0;
     let solSpent = 0;
     let buyer = accountKeys[feePayerIndex]?.pubkey?.toString() || null;
@@ -445,17 +427,14 @@ function calculateSolSpent(tx) {
       const postBalance = meta.postBalances[feePayerIndex] / LAMPORTS_PER_SOL;
       const fee = meta.fee / LAMPORTS_PER_SOL;
       
-      // SOL spent = balance decrease minus fee
       solSpent = Math.max(0, preBalance - postBalance - fee);
     }
     
-    // Method 2: If no SOL spent detected, check all accounts for significant SOL outflows
     if (solSpent < 0.001) {
       for (let i = 0; i < accountKeys.length; i++) {
         if (meta.preBalances?.[i] && meta.postBalances?.[i]) {
           const balanceChange = (meta.postBalances[i] - meta.preBalances[i]) / LAMPORTS_PER_SOL;
           
-          // Significant SOL outflow (buy)
           if (balanceChange < -0.001) {
             solSpent = Math.abs(balanceChange);
             buyer = accountKeys[i]?.pubkey?.toString() || buyer;
@@ -468,12 +447,11 @@ function calculateSolSpent(tx) {
     return { solSpent, buyer };
     
   } catch (e) {
-    logToConsole(`Error calculating SOL spent: ${e.message}`, 'error');
+    logToConsole("Error calculating SOL spent: " + e.message, 'error');
     return { solSpent: 0, buyer: null };
   }
 }
 
-// PERMANENT ATH PLAYER STORAGE
 function updatePermanentAthPlayers(purchase) {
   if (!purchase.isATHPurchase) return;
   
@@ -481,7 +459,6 @@ function updatePermanentAthPlayers(purchase) {
   const existing = permanentAthPlayers.get(wallet);
   
   if (!existing || purchase.marketPrice > existing.bestPurchase.marketPrice) {
-    // Get or create character
     let character = playerCharacters.get(wallet);
     if (!character) {
       character = createPlayerCharacter(wallet, purchase);
@@ -494,7 +471,7 @@ function updatePermanentAthPlayers(purchase) {
       lastUpdated: new Date().toISOString()
     });
     
-    logToConsole(`🏆 ${wallet} added to PERMANENT ATH Hall of Fame at $${purchase.marketPrice.toFixed(8)}`, 'success');
+    logToConsole("🏆 " + wallet + " added to PERMANENT ATH Hall of Fame at $" + purchase.marketPrice.toFixed(8), 'success');
   }
 }
 
@@ -540,20 +517,20 @@ async function monitorNewTokenTransactions() {
         await new Promise(r => setTimeout(r, 300));
         
       } catch (e) {
-        logToConsole(`Error processing transaction ${sig.signature}: ${e.message}`, 'error');
+        logToConsole("Error processing transaction " + sig.signature + ": " + e.message, 'error');
         processedTransactions.add(sig.signature);
       }
     }
     
     if (newPurchases.length > 0) {
-      logToConsole(`📊 New purchases detected: ${newPurchases.length} transactions`, 'success');
+      logToConsole("📊 New purchases detected: " + newPurchases.length + " transactions", 'success');
       broadcastUpdate();
     }
     
     return newPurchases;
     
   } catch (e) {
-    logToConsole(`Error monitoring transactions: ${e.message}`, 'error');
+    logToConsole("Error monitoring transactions: " + e.message, 'error');
     return [];
   }
 }
@@ -580,7 +557,6 @@ async function getFullTransactionDetails(signature) {
   }
 }
 
-// ---- EXPRESS SERVER ----
 app.get("/", (req, res) => {
   res.setHeader("Content-Type", "text/html");
   res.end(`
@@ -787,29 +763,6 @@ app.get("/", (req, res) => {
       .status-disconnected { color: #ff6b6b; }
       .blink { animation: blink 1s infinite; }
       @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
-      .tab-container {
-        display: flex;
-        border-bottom: 1px solid #00ff41;
-        margin-bottom: 10px;
-      }
-      .tab {
-        padding: 5px 10px;
-        cursor: pointer;
-        border: 1px solid #00ff41;
-        border-bottom: none;
-        margin-right: 5px;
-        background: rgba(0, 255, 65, 0.1);
-      }
-      .tab.active {
-        background: rgba(0, 255, 65, 0.3);
-        color: #ffff00;
-      }
-      .tab-content {
-        display: none;
-      }
-      .tab-content.active {
-        display: block;
-      }
     </style>
   </head>
   <body>
@@ -819,7 +772,6 @@ app.get("/", (req, res) => {
     
     <div class="game-container">
       <div class="main-content">
-        <!-- BOSS BATTLE SECTION -->
         <div class="terminal-container">
           <div class="ascii-header">
 ╔══════════════════════════════════════════════════════════════════════╗
@@ -840,7 +792,6 @@ app.get("/", (req, res) => {
             <div>Total Kills: <span id="total-kills">0</span> | Total Damage: <span id="total-damage">0</span></div>
           </div>
 
-          <!-- GAME EVENTS -->
           <div class="section">
             <div class="section-title">⚔️ LIVE BATTLE EVENTS</div>
             <div id="game-events" style="height: 120px; overflow-y: auto;">
@@ -848,7 +799,6 @@ app.get("/", (req, res) => {
             </div>
           </div>
 
-          <!-- PLAYER CHARACTERS -->
           <div class="section">
             <div class="section-title">🎮 ACTIVE PLAYERS (Top 10 by Damage)</div>
             <div id="players-list" style="max-height: 300px; overflow-y: auto;">
@@ -859,7 +809,6 @@ app.get("/", (req, res) => {
           </div>
         </div>
 
-        <!-- LIVE CONSOLE -->
         <div class="terminal-container">
           <div class="section">
             <div class="section-title">💻 LIVE CONSOLE OUTPUT</div>
@@ -877,7 +826,6 @@ app.get("/", (req, res) => {
       </div>
 
       <div class="sidebar">
-        <!-- PERMANENT ATH HALL OF FAME -->
         <div class="terminal-container">
           <div class="section">
             <div class="section-title">🏆 PERMANENT ATH HALL OF FAME</div>
@@ -888,7 +836,6 @@ app.get("/", (req, res) => {
             </div>
           </div>
 
-          <!-- ATH HERO -->
           <div id="ath-hero-section" style="display: none;">
             <div class="ath-hero">
               <div class="section-title">🎯 ULTIMATE ATH CHAD</div>
@@ -898,7 +845,6 @@ app.get("/", (req, res) => {
             </div>
           </div>
 
-          <!-- RECENT ATH PURCHASES -->
           <div class="section">
             <div class="section-title">📋 RECENT ATH TRANSACTIONS (FULL INFO)</div>
             <div id="recent-purchases-list" style="max-height: 300px; overflow-y: auto;">
@@ -908,7 +854,6 @@ app.get("/", (req, res) => {
             </div>
           </div>
 
-          <!-- GAME STATS -->
           <div class="section">
             <div class="section-title">📊 ACCURATE STATISTICS</div>
             <div id="game-stats" style="font-size: 10px;">
@@ -929,7 +874,7 @@ app.get("/", (req, res) => {
       
       function connectWebSocket() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        ws = new WebSocket(\`\${protocol}//\${window.location.host}\`);
+        ws = new WebSocket(protocol + '//' + window.location.host);
         
         ws.onopen = () => {
           document.getElementById('connection-indicator').className = 'status-connected';
@@ -954,102 +899,94 @@ app.get("/", (req, res) => {
       function updateGameInterface(data) {
         const { gameState, topPlayers, gameHistory, permanentAthPlayers, athChad, recentAthPurchases, stats } = data;
         
-        // Update Boss Info
-        document.getElementById('boss-name').textContent = \`\${gameState.bossName} Lv\${gameState.bossLevel}\`;
-        document.getElementById('boss-phase').textContent = \`Phase: \${gameState.bossPhase}\`;
-        document.getElementById('boss-health-bar').style.width = \`\${(gameState.bossHealth / gameState.bossMaxHealth) * 100}%\`;
-        document.getElementById('boss-health-text').textContent = \`\${gameState.bossHealth}/\${gameState.bossMaxHealth} HP\`;
+        document.getElementById('boss-name').textContent = gameState.bossName + ' Lv' + gameState.bossLevel;
+        document.getElementById('boss-phase').textContent = 'Phase: ' + gameState.bossPhase;
+        document.getElementById('boss-health-bar').style.width = ((gameState.bossHealth / gameState.bossMaxHealth) * 100) + '%';
+        document.getElementById('boss-health-text').textContent = gameState.bossHealth + '/' + gameState.bossMaxHealth + ' HP';
         document.getElementById('boss-power').textContent = gameState.bossPower;
         document.getElementById('boss-level').textContent = gameState.bossLevel;
         document.getElementById('total-kills').textContent = gameState.totalBossKills;
         document.getElementById('total-damage').textContent = gameState.totalDamageDealt;
         
-        // Update Game Events
         const eventsContainer = document.getElementById('game-events');
         eventsContainer.innerHTML = '';
         gameHistory.slice(-8).reverse().forEach(event => {
           const eventDiv = document.createElement('div');
-          eventDiv.className = \`game-event event-\${event.type.includes('BOSS') ? 'boss' : event.type.includes('PLAYER') ? 'player' : 'system'}\`;
-          eventDiv.textContent = \`[\${new Date(event.timestamp).toLocaleTimeString()}] \${event.message}\`;
+          eventDiv.className = 'game-event event-' + (event.type.includes('BOSS') ? 'boss' : event.type.includes('PLAYER') ? 'player' : 'system');
+          eventDiv.textContent = '[' + new Date(event.timestamp).toLocaleTimeString() + '] ' + event.message;
           eventsContainer.appendChild(eventDiv);
         });
         eventsContainer.scrollTop = eventsContainer.scrollHeight;
         
-        // Update Player List
         const playersContainer = document.getElementById('players-list');
         if (topPlayers.length === 0) {
           playersContainer.innerHTML = '<div style="text-align: center; color: #666; padding: 10px;">[NO PLAYERS YET... BUY TOKEN TO JOIN BATTLE!]<span class="blink">_</span></div>';
         } else {
-          playersContainer.innerHTML = topPlayers.map(player => \`
-            <div class="player-card">
-              <div><strong>#\${player.rank} \${player.wallet}</strong></div>
-              <div>Lv\${player.level} \${player.class} | \${player.title}</div>
-              <div>Damage: \${player.totalDamage} | Power: \${player.power}</div>
-              <div class="player-health-bar">
-                <div class="player-health-fill" style="width: \${(player.health / player.maxHealth) * 100}%"></div>
-              </div>
-              <div style="font-size: 9px;">HP: \${player.health}/\${player.maxHealth}</div>
-            </div>
-          \`).join('');
+          playersContainer.innerHTML = topPlayers.map(player => {
+            return '<div class="player-card">' +
+              '<div><strong>#' + player.rank + ' ' + player.wallet + '</strong></div>' +
+              '<div>Lv' + player.level + ' ' + player.class + ' | ' + player.title + '</div>' +
+              '<div>Damage: ' + player.totalDamage + ' | Power: ' + player.power + '</div>' +
+              '<div class="player-health-bar">' +
+              '<div class="player-health-fill" style="width: ' + ((player.health / player.maxHealth) * 100) + '%"></div>' +
+              '</div>' +
+              '<div style="font-size: 9px;">HP: ' + player.health + '/' + player.maxHealth + '</div>' +
+              '</div>';
+          }).join('');
         }
         
-        // Update PERMANENT ATH Hall of Fame
         const permanentContainer = document.getElementById('permanent-ath-players');
         if (permanentAthPlayers.length === 0) {
           permanentContainer.innerHTML = '<div style="text-align: center; color: #666; padding: 10px; font-size: 9px;">[NO ATH PLAYERS YET...]<span class="blink">_</span></div>';
         } else {
-          permanentContainer.innerHTML = permanentAthPlayers.map((player, index) => \`
-            <div class="ath-player-card">
-              <div style="color: #ffd700; font-weight: bold;">#\${index + 1} ATH CHAMPION</div>
-              <div class="full-address">\${player.wallet}</div>
-              <div>Price: <strong>$\${player.bestPurchase.marketPrice.toFixed(8)}</strong></div>
-              <div>SOL: \${player.bestPurchase.solAmount.toFixed(4)} | Tokens: \${player.bestPurchase.tokenAmount.toFixed(0)}</div>
-              <div class="full-address" style="font-size: 8px;">TXN: \${player.bestPurchase.signature}</div>
-              <div style="font-size: 9px;">Class: \${player.character.class} | Lv: \${player.character.level}</div>
-            </div>
-          \`).join('');
+          permanentContainer.innerHTML = permanentAthPlayers.map((player, index) => {
+            return '<div class="ath-player-card">' +
+              '<div style="color: #ffd700; font-weight: bold;">#' + (index + 1) + ' ATH CHAMPION</div>' +
+              '<div class="full-address">' + player.wallet + '</div>' +
+              '<div>Price: <strong>$' + player.bestPurchase.marketPrice.toFixed(8) + '</strong></div>' +
+              '<div>SOL: ' + player.bestPurchase.solAmount.toFixed(4) + ' | Tokens: ' + player.bestPurchase.tokenAmount.toFixed(0) + '</div>' +
+              '<div class="full-address" style="font-size: 8px;">TXN: ' + player.bestPurchase.signature + '</div>' +
+              '<div style="font-size: 9px;">Class: ' + player.character.class + ' | Lv: ' + player.character.level + '</div>' +
+              '</div>';
+          }).join('');
         }
         
-        // Update ATH Hero
         const heroSection = document.getElementById('ath-hero-section');
         if (athChad) {
           heroSection.style.display = 'block';
           document.getElementById('hero-wallet').textContent = athChad.wallet;
-          document.getElementById('hero-price').textContent = \`$\${athChad.bestPurchase.marketPrice.toFixed(8)}\`;
+          document.getElementById('hero-price').textContent = '$' + athChad.bestPurchase.marketPrice.toFixed(8);
           document.getElementById('hero-signature').textContent = athChad.bestPurchase.signature;
         } else {
           heroSection.style.display = 'none';
         }
         
-        // Update Recent ATH Purchases with FULL INFO
         const recentContainer = document.getElementById('recent-purchases-list');
         if (recentAthPurchases.length === 0) {
           recentContainer.innerHTML = '<div style="text-align: center; color: #666; padding: 10px; font-size: 9px;">[NO ATH PURCHASES YET...]<span class="blink">_</span></div>';
         } else {
-          recentContainer.innerHTML = recentAthPurchases.map(purchase => \`
-            <div class="buyer-entry">
-              <div class="full-address"><strong>\${purchase.wallet}</strong></div>
-              <div>Price: $\${purchase.marketPrice.toFixed(8)} | SOL: \${purchase.solAmount.toFixed(6)}</div>
-              <div>Tokens: \${purchase.tokenAmount.toFixed(2)} | Time: \${secondsAgo(purchase.txTime)}</div>
-              <div class="full-address" style="font-size: 8px;">TXN: \${purchase.signature}</div>
-            </div>
-          \`).join('');
+          recentContainer.innerHTML = recentAthPurchases.map(purchase => {
+            return '<div class="buyer-entry">' +
+              '<div class="full-address"><strong>' + purchase.wallet + '</strong></div>' +
+              '<div>Price: $' + purchase.marketPrice.toFixed(8) + ' | SOL: ' + purchase.solAmount.toFixed(6) + '</div>' +
+              '<div>Tokens: ' + purchase.tokenAmount.toFixed(2) + ' | Time: ' + secondsAgo(purchase.txTime) + '</div>' +
+              '<div class="full-address" style="font-size: 8px;">TXN: ' + purchase.signature + '</div>' +
+              '</div>';
+          }).join('');
         }
         
-        // Update Stats
         document.getElementById('stat-players').textContent = stats.activePlayers;
         document.getElementById('stat-permanent-ath').textContent = stats.permanentAthCount;
         document.getElementById('stat-price').textContent = stats.lastPrice.toFixed(8);
         document.getElementById('stat-ath').textContent = stats.allTimeHighPrice.toFixed(8);
         document.getElementById('stat-damage').textContent = stats.totalDamageDealt;
         
-        // Update Console
         const consoleOutput = document.getElementById('console-output');
         consoleOutput.innerHTML = '';
         data.consoleMessages.slice(-15).forEach(msg => {
           const line = document.createElement('div');
-          line.className = \`console-line console-\${msg.type}\`;
-          line.innerHTML = \`<span class="console-timestamp">[\${new Date(msg.timestamp).toLocaleTimeString()}]</span> \${msg.message}\`;
+          line.className = 'console-line console-' + msg.type;
+          line.innerHTML = '<span class="console-timestamp">[' + new Date(msg.timestamp).toLocaleTimeString() + ']</span> ' + msg.message;
           consoleOutput.appendChild(line);
         });
         consoleOutput.scrollTop = consoleOutput.scrollHeight;
@@ -1058,9 +995,9 @@ app.get("/", (req, res) => {
       function secondsAgo(ts) {
         const now = Date.now();
         const diff = Math.floor((now - ts) / 1000);
-        if (diff < 60) return \`\${diff}s ago\`;
-        if (diff < 3600) return \`\${Math.floor(diff/60)}m ago\`;
-        return \`\${Math.floor(diff/3600)}h ago\`;
+        if (diff < 60) return diff + 's ago';
+        if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+        return Math.floor(diff/3600) + 'h ago';
       }
 
       connectWebSocket();
@@ -1076,12 +1013,11 @@ app.get("/api/stats", (req, res) => {
 
 const PORT = process.env.PORT || 1000;
 server.listen(PORT, () => {
-  logToConsole(`🚀 Accurate ATH MMORPG Server running on http://localhost:${PORT}`, 'success');
-  logToConsole(`🎮 Permanent ATH tracking activated!`, 'info');
-  logToConsole(`📊 Monitoring token: ${TOKEN_MINT} with enhanced accuracy`, 'info');
+  logToConsole("🚀 Accurate ATH MMORPG Server running on http://localhost:" + PORT, 'success');
+  logToConsole("🎮 Permanent ATH tracking activated!", 'info');
+  logToConsole("📊 Monitoring token: " + TOKEN_MINT + " with enhanced accuracy", 'info');
 });
 
-// ---- ENHANCED GAME LOOP ----
 async function gameLoop() {
   let currentPriceData = null;
   
@@ -1112,14 +1048,14 @@ async function gameLoop() {
             purchase.isATHPurchase = currentPriceData.isNewATH;
             athPurchases.push(purchase);
 
-            // Update permanent ATH storage
             updatePermanentAthPlayers(purchase);
 
             if (!playerCharacters.has(purchase.wallet)) {
               createPlayerCharacter(purchase.wallet, purchase);
+              const playerClass = playerCharacters.get(purchase.wallet).class;
               gameHistory.push({
                 type: "PLAYER_JOIN",
-                message: \`🎮 New player joined: \${purchase.wallet} the \${playerCharacters.get(purchase.wallet).class}!\`,
+                message: "🎮 New player joined: " + purchase.wallet + " the " + playerClass + "!",
                 timestamp: Date.now()
               });
             }
@@ -1134,7 +1070,7 @@ async function gameLoop() {
 
             gameHistory.push({
               type: "PLAYER_ATTACK",
-              message: \`⚔️ \${purchase.wallet} attacks \${currentBossName} for \${damage} damage at $\${currentPriceData.price.toFixed(8)}!\`,
+              message: "⚔️ " + purchase.wallet + " attacks " + currentBossName + " for " + damage + " damage at $" + currentPriceData.price.toFixed(8) + "!",
               timestamp: Date.now()
             });
 
@@ -1144,7 +1080,7 @@ async function gameLoop() {
               player.power += 2;
               gameHistory.push({
                 type: "PLAYER_LEVEL_UP",
-                message: \`🌟 \${purchase.wallet} leveled up to Lv\${player.level}!\`,
+                message: "🌟 " + purchase.wallet + " leveled up to Lv" + player.level + "!",
                 timestamp: Date.now()
               });
             }
@@ -1153,7 +1089,6 @@ async function gameLoop() {
         broadcastUpdate();
       }
 
-      // Cleanup
       if (processedTransactions.size > 10000) {
         const toRemove = Array.from(processedTransactions).slice(0, 5000);
         toRemove.forEach(sig => processedTransactions.delete(sig));
@@ -1168,20 +1103,20 @@ async function gameLoop() {
           playerCharacters.delete(wallet);
           gameHistory.push({
             type: "PLAYER_LEAVE",
-            message: \`👋 \${wallet} has left the battle.\`,
+            message: "👋 " + wallet + " has left the battle.",
             timestamp: now
           });
         }
       });
 
     } catch (e) {
-      logToConsole(\`❌ Error in game loop: \${e.message}\`, 'error');
+      logToConsole("❌ Error in game loop: " + e.message, 'error');
     }
     await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
   }
 }
 
 gameLoop().catch(e => {
-  logToConsole(\`💥 Fatal game error: \${e.message}\`, 'error');
+  logToConsole("💥 Fatal game error: " + e.message, 'error');
   process.exit(1);
 });
