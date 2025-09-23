@@ -5,7 +5,7 @@ import http from 'http';
 import fetch from 'node-fetch';
 
 const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
-const TOKEN_MINT = "Gupf4N7c9WWr87naP2pC2m5JCwrs8QFBRB6yC1Xomxr7";
+const TOKEN_MINT = "DXDXsP4v7cszJkdBYuuhK5SDaLGtb9YxQJ2fg277qdpb";
 const POLL_INTERVAL_MS = 5000;
 const ATH_BUY_MIN_SOL = 0.1;
 
@@ -1120,3 +1120,4 @@ gameLoop().catch(e => {
   logToConsole("💥 Fatal game error: " + e.message, 'error');
   process.exit(1);
 });
+
