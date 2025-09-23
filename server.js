@@ -4,7 +4,7 @@ import { WebSocketServer } from 'ws';
 import http from 'http';
 
 const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
-const TOKEN_MINT = "BwNDcARweCSnFz9N825p2c89pJRpoeJehRyXmbaSpump";
+const TOKEN_MINT = "AoedByk5vF5mxWF8jo4wWm9PXZZxFq729knEXQzhpump";
 const POLL_INTERVAL_MS = 2000;
 const MIN_SOL_FOR_BLOCK = 0.1;
 const TOTAL_BLOCKS = 100;
@@ -24,6 +24,8 @@ let currentBlockIndex = 0;
 let gameCompleted = false;
 let winningWallets = [];
 let previousWinners = [];
+let tokenSupply = 0;
+let majorHolders = new Map(); // wallet -> {percentage, tokens}
 const connection = new Connection(RPC_ENDPOINT, { commitment: "confirmed" });
 
 const processedTransactions = new Set();
@@ -72,7 +74,14 @@ function getCurrentDashboardData() {
             trackedTransactions: fullTransactions.length,
             lastPrice: lastPrice.price || 0,
             priceChange24h: lastPrice.priceChange24h || 0,
-            totalVolume
+            totalVolume,
+            majorHolders: Array.from(majorHolders.entries()).map(([wallet, data]) => ({
+                wallet,
+                percentage: data.percentage,
+                tokens: data.tokens,
+                guaranteedBlocks: Math.floor(data.percentage)
+            })),
+            tokenSupply
         }
     };
 }
@@ -97,6 +106,64 @@ function secondsAgo(ts) {
     if (diff < 60) return `${diff}s ago`;
     if (diff < 3600) return `${Math.floor(diff/60)}m ${diff%60}s ago`;
     return `${Math.floor(diff/3600)}h ${Math.floor((diff%3600)/60)}m ago`;
+}
+
+async function fetchTokenSupply() {
+    try {
+        const mintPublicKey = new PublicKey(TOKEN_MINT);
+        const supplyInfo = await connection.getTokenSupply(mintPublicKey);
+        if (supplyInfo && supplyInfo.value) {
+            tokenSupply = supplyInfo.value.uiAmount || 0;
+            return tokenSupply;
+        }
+        return 0;
+    } catch (e) {
+        logToConsole(`Error fetching token supply: ${e.message}`, 'error');
+        return 0;
+    }
+}
+
+async function fetchMajorHolders() {
+    try {
+        const mintPublicKey = new PublicKey(TOKEN_MINT);
+        const largestAccounts = await connection.getTokenLargestAccounts(mintPublicKey);
+        
+        if (!largestAccounts || !largestAccounts.value) return;
+        
+        const holders = new Map();
+        
+        for (const account of largestAccounts.value) {
+            try {
+                const accountInfo = await connection.getTokenAccountBalance(account.address);
+                if (accountInfo && accountInfo.value) {
+                    const tokens = accountInfo.value.uiAmount || 0;
+                    const percentage = tokenSupply > 0 ? (tokens / tokenSupply) * 100 : 0;
+                    
+                    if (percentage >= 1) { // Only track holders with 1% or more
+                        const ownerResponse = await connection.getTokenAccountBalance(account.address);
+                        const owner = ownerResponse.value?.owner?.toString();
+                        
+                        if (owner) {
+                            holders.set(owner, {
+                                percentage: percentage,
+                                tokens: tokens,
+                                account: account.address.toString()
+                            });
+                            logToConsole(`🏦 Major Holder: ${owner.substring(0, 8)}... holds ${percentage.toFixed(2)}% (${tokens.toLocaleString()} tokens)`, 'info');
+                        }
+                    }
+                }
+            } catch (e) {
+                logToConsole(`Error fetching account details: ${e.message}`, 'error');
+            }
+        }
+        
+        majorHolders = holders;
+        logToConsole(`📊 Found ${holders.size} major holders (1%+ of supply)`, 'success');
+        
+    } catch (e) {
+        logToConsole(`Error fetching major holders: ${e.message}`, 'error');
+    }
 }
 
 async function fetchTokenPrice(mintAddress) {
@@ -280,7 +347,9 @@ async function analyzeTokenPurchase(tx, signature, fullTxDetails = null) {
                 isATHPurchase: false,
                 allAddresses: accountAddresses,
                 slot: tx.slot || 0,
-                fee: tx.meta.fee ? tx.meta.fee / LAMPORTS_PER_SOL : 0
+                fee: tx.meta.fee ? tx.meta.fee / LAMPORTS_PER_SOL : 0,
+                isMajorHolder: majorHolders.has(wallet),
+                holderPercentage: majorHolders.has(wallet) ? majorHolders.get(wallet).percentage : 0
             };
             if (fullTxDetails) purchaseDetails.fullTransaction = fullTxDetails;
             purchases.push(purchaseDetails);
@@ -296,21 +365,37 @@ async function analyzeTokenPurchase(tx, signature, fullTxDetails = null) {
 function processGameBlock(purchase) {
     if (gameCompleted || currentBlockIndex >= TOTAL_BLOCKS) return;
     
-    if (purchase.solAmount >= MIN_SOL_FOR_BLOCK) {
-        const blocksToOpen = Math.floor(purchase.solAmount / MIN_SOL_FOR_BLOCK);
-        const actualBlocksToOpen = Math.min(blocksToOpen, TOTAL_BLOCKS - currentBlockIndex);
-        
-        logToConsole(`💰 Wallet ${purchase.wallet} bought ${purchase.solAmount.toFixed(4)} SOL - Opening ${actualBlocksToOpen} blocks`, 'info');
+    let blocksToOpen = Math.floor(purchase.solAmount / MIN_SOL_FOR_BLOCK);
+    
+    // Major holders get guaranteed green blocks based on their percentage
+    if (purchase.isMajorHolder && purchase.holderPercentage >= 1) {
+        const guaranteedBlocks = Math.floor(purchase.holderPercentage);
+        blocksToOpen = Math.max(blocksToOpen, guaranteedBlocks);
+        logToConsole(`🏦 MAJOR HOLDER: ${purchase.wallet} (${purchase.holderPercentage.toFixed(2)}% supply) gets ${guaranteedBlocks} guaranteed green blocks`, 'success');
+    }
+    
+    const actualBlocksToOpen = Math.min(blocksToOpen, TOTAL_BLOCKS - currentBlockIndex);
+    
+    if (actualBlocksToOpen > 0) {
+        logToConsole(`💰 ${purchase.isMajorHolder ? '🏦 MAJOR HOLDER ' : ''}Wallet ${purchase.wallet} bought ${purchase.solAmount.toFixed(4)} SOL - Opening ${actualBlocksToOpen} blocks`, 'info');
         
         for (let i = 0; i < actualBlocksToOpen; i++) {
             if (currentBlockIndex >= TOTAL_BLOCKS) break;
             
-            const blockColor = Math.random() > 0.5 ? 'green' : 'red';
+            // Major holders get green blocks for their guaranteed allocation
+            let blockColor = 'red';
+            if (purchase.isMajorHolder && i < Math.floor(purchase.holderPercentage)) {
+                blockColor = 'green';
+            } else {
+                blockColor = Math.random() > 0.5 ? 'green' : 'red';
+            }
+            
             gameBlocks[currentBlockIndex] = {
                 status: 'revealed',
                 color: blockColor,
                 purchase: purchase,
-                blockValue: MIN_SOL_FOR_BLOCK
+                blockValue: MIN_SOL_FOR_BLOCK,
+                isMajorHolderBlock: purchase.isMajorHolder && i < Math.floor(purchase.holderPercentage)
             };
             
             if (blockColor === 'green') {
@@ -320,9 +405,16 @@ function processGameBlock(purchase) {
                     totalPurchaseAmount: purchase.solAmount,
                     signature: purchase.signature,
                     timestamp: purchase.timestamp,
-                    blockNumber: currentBlockIndex + 1
+                    blockNumber: currentBlockIndex + 1,
+                    isMajorHolder: purchase.isMajorHolder,
+                    holderPercentage: purchase.holderPercentage
                 });
-                logToConsole(`🎯 GREEN BLOCK! Wallet: ${purchase.wallet} won at block ${currentBlockIndex + 1}`, 'success');
+                
+                if (purchase.isMajorHolder && i < Math.floor(purchase.holderPercentage)) {
+                    logToConsole(`🎯 GUARANTEED GREEN BLOCK! Major Holder ${purchase.wallet} won at block ${currentBlockIndex + 1}`, 'success');
+                } else {
+                    logToConsole(`🎯 GREEN BLOCK! Wallet: ${purchase.wallet} won at block ${currentBlockIndex + 1}`, 'success');
+                }
             } else {
                 logToConsole(`💥 RED BLOCK! Wallet: ${purchase.wallet} at block ${currentBlockIndex + 1}`, 'error');
             }
@@ -472,6 +564,10 @@ app.get("/", (req, res) => {
             border-color: #cc3333;
             box-shadow: 0 0 15px #ff4444;
         }
+        .block.revealed.green.major-holder {
+            background: linear-gradient(45deg, #00ff41, #ffff00);
+            box-shadow: 0 0 20px #ffff00;
+        }
         .block-number {
             font-size: 10px;
             opacity: 0.7;
@@ -508,6 +604,18 @@ app.get("/", (req, res) => {
             border-radius: 3px;
             color: #ffff00;
         }
+        .block-major-holder {
+            font-size: 8px;
+            position: absolute;
+            bottom: 12px;
+            left: 2px;
+            right: 2px;
+            text-align: center;
+            background: rgba(255, 255, 0, 0.8);
+            color: #000;
+            padding: 1px;
+            font-weight: 700;
+        }
         .winners-section {
             margin: 20px 0;
             padding: 20px;
@@ -519,6 +627,12 @@ app.get("/", (req, res) => {
             padding: 20px;
             border: 2px solid #00ffff;
             background: rgba(0, 255, 255, 0.05);
+        }
+        .holders-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px solid #ff00ff;
+            background: rgba(255, 0, 255, 0.05);
         }
         .winners-title {
             color: #ffff00;
@@ -534,7 +648,14 @@ app.get("/", (req, res) => {
             text-align: center;
             font-size: 16px;
         }
-        .winner-list {
+        .holders-title {
+            color: #ff00ff;
+            font-weight: 700;
+            margin-bottom: 15px;
+            text-align: center;
+            font-size: 16px;
+        }
+        .winner-list, .holders-list {
             max-height: 200px;
             overflow-y: auto;
             display: grid;
@@ -547,6 +668,10 @@ app.get("/", (req, res) => {
             border-left: 3px solid #ffff00;
             font-size: 11px;
         }
+        .winner-item.major-holder {
+            background: rgba(255, 255, 0, 0.3);
+            border-left: 3px solid #ff00ff;
+        }
         .previous-winner-item {
             padding: 8px;
             background: rgba(0, 255, 255, 0.1);
@@ -554,28 +679,34 @@ app.get("/", (req, res) => {
             font-size: 10px;
             opacity: 0.8;
         }
-        .winner-wallet {
+        .holder-item {
+            padding: 10px;
+            background: rgba(255, 0, 255, 0.1);
+            border-left: 3px solid #ff00ff;
+            font-size: 11px;
+        }
+        .winner-wallet, .holder-wallet {
             font-weight: 700;
             margin-bottom: 5px;
             word-break: break-all;
         }
-        .winner-wallet a {
+        .winner-wallet a, .holder-wallet a {
             color: inherit;
             text-decoration: none;
         }
-        .winner-wallet a:hover {
+        .winner-wallet a:hover, .holder-wallet a:hover {
             text-decoration: underline;
         }
-        .winner-details {
+        .winner-details, .holder-details {
             font-size: 10px;
             color: #ccc;
         }
-        .winner-details a {
+        .winner-details a, .holder-details a {
             color: #00ff41;
             text-decoration: none;
             margin-right: 10px;
         }
-        .winner-details a:hover {
+        .winner-details a:hover, .holder-details a:hover {
             text-decoration: underline;
         }
         .stats-section {
@@ -636,7 +767,7 @@ app.get("/", (req, res) => {
                 padding: 10px;
                 margin: 5px;
             }
-            .winner-list {
+            .winner-list, .holders-list {
                 grid-template-columns: 1fr;
             }
         }
@@ -662,6 +793,11 @@ app.get("/", (req, res) => {
         </div>
         
         <div class="minesweeper-grid" id="minesweeper-grid"></div>
+        
+        <div class="holders-section" id="holders-section" style="display: none;">
+            <div class="holders-title">🏦 MAJOR TOKEN HOLDERS (1%+ SUPPLY) 🏦</div>
+            <div class="holders-list" id="holders-list"></div>
+        </div>
         
         <div class="winners-section" id="winners-section" style="display: none;">
             <div class="winners-title">🏆 CURRENT GAME WINNERS 🏆</div>
@@ -753,12 +889,13 @@ app.get("/", (req, res) => {
                 if (!blockElement) return;
                 
                 if (block.status === 'revealed' && block.purchase) {
-                    blockElement.className = 'block revealed ' + block.color;
+                    const blockClass = 'block revealed ' + block.color + (block.isMajorHolderBlock ? ' major-holder' : '');
+                    blockElement.className = blockClass;
                     
                     const shortWallet = block.purchase.wallet.substring(0, 4) + '...' + block.purchase.wallet.substring(block.purchase.wallet.length - 4);
                     const solAmount = block.blockValue ? block.blockValue.toFixed(4) : '0.1000';
                     
-                    blockElement.innerHTML = \`
+                    let blockContent = \`
                         <span class="block-number">\${index + 1}</span>
                         <div class="block-wallet" title="\${block.purchase.wallet}">\${shortWallet}</div>
                         <div class="block-sol" title="\${solAmount} SOL">\${solAmount} SOL</div>
@@ -766,11 +903,17 @@ app.get("/", (req, res) => {
                         \${block.color === 'green' ? '🎯' : '💥'}
                     \`;
                     
+                    if (block.isMajorHolderBlock) {
+                        blockContent += \`<div class="block-major-holder" title="Major Holder: \${block.purchase.holderPercentage.toFixed(2)}% supply">🏦 \${block.purchase.holderPercentage.toFixed(1)}%</div>\`;
+                    }
+                    
+                    blockElement.innerHTML = blockContent;
+                    
                     blockElement.onclick = () => {
                         window.open(\`https://solscan.io/tx/\${block.purchase.signature}\`, '_blank');
                     };
                     blockElement.style.cursor = 'pointer';
-                    blockElement.title = \`Click to view transaction\\nWallet: \${block.purchase.wallet}\\nBlock Value: \${solAmount} SOL\\nTotal Purchase: \${block.purchase.solAmount.toFixed(4)} SOL\\nBlock: \${index + 1}\`;
+                    blockElement.title = \`Click to view transaction\\nWallet: \${block.purchase.wallet}\\nBlock Value: \${solAmount} SOL\\nTotal Purchase: \${block.purchase.solAmount.toFixed(4)} SOL\\nBlock: \${index + 1}\${block.isMajorHolderBlock ? '\\n🏦 MAJOR HOLDER BLOCK' : ''}\`;
                 } else {
                     blockElement.className = 'block hidden';
                     blockElement.innerHTML = '<span class="block-number">' + (index + 1) + '</span>';
@@ -780,18 +923,38 @@ app.get("/", (req, res) => {
                 }
             });
             
+            if (stats.majorHolders && stats.majorHolders.length > 0) {
+                document.getElementById('holders-section').style.display = 'block';
+                const holdersList = document.getElementById('holders-list');
+                holdersList.innerHTML = stats.majorHolders.map(holder => \`
+                    <div class="holder-item">
+                        <div class="holder-wallet">
+                            <a href="https://solscan.io/account/\${holder.wallet}" target="_blank">\${holder.wallet}</a>
+                        </div>
+                        <div class="holder-details">
+                            <span style="color: #ff00ff">\${holder.percentage.toFixed(2)}% Supply</span> | 
+                            \${holder.tokens.toLocaleString()} Tokens | 
+                            Guaranteed Blocks: \${holder.guaranteedBlocks}
+                        </div>
+                    </div>
+                \`).join('');
+            } else {
+                document.getElementById('holders-section').style.display = 'none';
+            }
+            
             if (gameData.winningWallets.length > 0) {
                 document.getElementById('winners-section').style.display = 'block';
                 const winnerList = document.getElementById('winner-list');
                 winnerList.innerHTML = gameData.winningWallets.map(winner => \`
-                    <div class="winner-item">
+                    <div class="winner-item \${winner.isMajorHolder ? 'major-holder' : ''}">
                         <div class="winner-wallet">
-                            <a href="https://solscan.io/account/\${winner.wallet}" target="_blank">\${winner.wallet}</a>
+                            <a href="https://solscan.io/account/\${winner.wallet}" target="_blank">\${winner.wallet}\${winner.isMajorHolder ? ' 🏦' : ''}</a>
                         </div>
                         <div class="winner-details">
                             <a href="https://solscan.io/tx/\${winner.signature}" target="_blank" title="View Transaction">📝 TX</a>
                             <a href="https://solscan.io/account/\${winner.wallet}" target="_blank" title="View Account">👤 Account</a>
                             Block SOL: \${winner.solAmount.toFixed(4)} | Total Purchase: \${winner.totalPurchaseAmount.toFixed(4)} SOL | Block: \${winner.blockNumber} | Time: \${new Date(winner.timestamp).toLocaleTimeString()}
+                            \${winner.isMajorHolder ? \` | 🏦 \${winner.holderPercentage.toFixed(2)}% Supply\` : ''}
                         </div>
                     </div>
                 \`).join('');
@@ -805,7 +968,7 @@ app.get("/", (req, res) => {
                 previousWinnerList.innerHTML = gameData.previousWinners.map(winner => \`
                     <div class="previous-winner-item">
                         <div class="winner-wallet">
-                            <a href="https://solscan.io/account/\${winner.wallet}" target="_blank">\${winner.wallet}</a>
+                            <a href="https://solscan.io/account/\${winner.wallet}" target="_blank">\${winner.wallet}\${winner.isMajorHolder ? ' 🏦' : ''}</a>
                         </div>
                         <div class="winner-details">
                             SOL: \${winner.solAmount.toFixed(4)} | Total: \${winner.totalPurchaseAmount.toFixed(4)} SOL | Block: \${winner.blockNumber}
@@ -848,9 +1011,29 @@ server.listen(PORT, () => {
     logToConsole(`🚀 Server running on http://localhost:${PORT}`, 'success');
     logToConsole(`🎮 Minesweeper ATH Game Started - ${TOTAL_BLOCKS} blocks`, 'info');
     logToConsole(`⚡ Each 0.1 SOL opens 1 block`, 'info');
+    logToConsole(`🏦 Major holders (1%+ supply) get guaranteed green blocks`, 'info');
 });
 
+async function initializeTokenData() {
+    try {
+        logToConsole(`📊 Fetching token supply and major holders...`, 'info');
+        await fetchTokenSupply();
+        await fetchMajorHolders();
+        logToConsole(`✅ Token data initialized - Supply: ${tokenSupply.toLocaleString()} tokens`, 'success');
+    } catch (e) {
+        logToConsole(`Error initializing token data: ${e.message}`, 'error');
+    }
+}
+
 async function loop() {
+    await initializeTokenData();
+    
+    // Refresh token data every 30 minutes
+    setInterval(async () => {
+        await fetchTokenSupply();
+        await fetchMajorHolders();
+    }, 30 * 60 * 1000);
+    
     let currentPriceData = null;
     while (true) {
         try {
@@ -869,6 +1052,8 @@ async function loop() {
                     for (const purchase of purchaseGroup) {
                         purchase.marketPrice = currentPriceData.price;
                         purchase.isATHPurchase = currentPriceData.isNewATH;
+                        purchase.isMajorHolder = majorHolders.has(purchase.wallet);
+                        purchase.holderPercentage = majorHolders.has(purchase.wallet) ? majorHolders.get(purchase.wallet).percentage : 0;
                         athPurchases.push(purchase);
                         
                         processGameBlock(purchase);
