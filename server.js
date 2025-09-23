@@ -11,10 +11,10 @@ const TOTAL_BLOCKS = 100;
 const MIN_TOKENS_FOR_GUARANTEED_GREEN = 1000000;
 const GREEN_CHANCE = 0.33;
 
+// Simple in-memory storage - no JSON files
 let allTimeHighPrice = 0;
-let priceHistory = [];
-let athPurchases = [];
-let fullTransactions = [];
+let currentPrice = 0;
+let priceChange24h = 0;
 let consoleMessages = [];
 let totalVolume = 0;
 let gameBlocks = Array(TOTAL_BLOCKS).fill(null).map(() => ({ 
@@ -52,7 +52,6 @@ function broadcastUpdate() {
 }
 
 function getCurrentDashboardData() {
-    const lastPrice = priceHistory.length > 0 ? priceHistory[priceHistory.length - 1] : { price: 0, priceChange24h: 0 };
     const progress = Math.min(100, (currentBlockIndex / TOTAL_BLOCKS) * 100);
     
     const millionTokenHolders = Array.from(majorHolders.entries())
@@ -65,11 +64,10 @@ function getCurrentDashboardData() {
         }));
     
     return {
-        priceHistory,
+        currentPrice,
         allTimeHighPrice,
-        athPurchases,
-        fullTransactions,
-        consoleMessages,
+        priceChange24h,
+        consoleMessages: consoleMessages.slice(-50), // Keep only last 50 messages
         gameData: {
             blocks: gameBlocks,
             currentBlockIndex,
@@ -80,15 +78,15 @@ function getCurrentDashboardData() {
             previousWinners
         },
         stats: {
-            totalATHPurchases: athPurchases.filter(p => p.isATHPurchase).length,
-            uniqueBuyers: new Set(athPurchases.filter(p => p.isATHPurchase).map(p => p.wallet)).size,
-            trackedTransactions: fullTransactions.length,
-            lastPrice: lastPrice.price || 0,
-            priceChange24h: lastPrice.priceChange24h || 0,
+            uniqueBuyers: new Set(winningWallets.map(p => p.wallet)).size,
+            totalBlocksOpened: currentBlockIndex,
+            currentPrice: currentPrice,
+            priceChange24h: priceChange24h,
             totalVolume,
             millionTokenHolders,
             tokenSupply,
-            greenChance: GREEN_CHANCE * 100
+            greenChance: GREEN_CHANCE * 100,
+            blocksRemaining: TOTAL_BLOCKS - currentBlockIndex
         }
     };
 }
@@ -103,7 +101,8 @@ function logToConsole(message, type = 'info') {
     };
     console.log(`[${timestamp}] ${type.toUpperCase()}: ${message}`);
     consoleMessages.push(logEntry);
-    if (consoleMessages.length > 500) consoleMessages.shift();
+    // Keep only last 100 messages to prevent memory issues
+    if (consoleMessages.length > 100) consoleMessages.shift();
     broadcastUpdate();
 }
 
@@ -113,14 +112,14 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
             const response = await fetch(url, options);
             if (response.status === 429) {
                 const waitTime = delay * Math.pow(2, i);
-                logToConsole(`Rate limited, waiting ${waitTime}ms before retry ${i + 1}/${retries}`, 'info');
+                logToConsole(`Rate limited, waiting ${waitTime}ms`, 'info');
                 await new Promise(resolve => setTimeout(resolve, waitTime));
                 continue;
             }
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
-            return response;
+            return await response.json();
         } catch (error) {
             if (i === retries - 1) throw error;
             const waitTime = delay * Math.pow(2, i);
@@ -152,7 +151,7 @@ async function fetchMajorHolders() {
         
         if (!largestAccounts || !largestAccounts.value) {
             logToConsole('No token accounts found', 'error');
-            return;
+            return new Map();
         }
         
         const holders = new Map();
@@ -187,7 +186,7 @@ async function fetchMajorHolders() {
             } catch (e) {
                 logToConsole(`Error processing account ${account.address}: ${e.message}`, 'error');
             }
-            await new Promise(r => setTimeout(r, 200));
+            await new Promise(r => setTimeout(r, 100)); // Faster processing
         }
         
         majorHolders = holders;
@@ -200,71 +199,46 @@ async function fetchMajorHolders() {
     }
 }
 
-async function fetchTokenPrice(mintAddress) {
+async function fetchTokenPrice() {
     try {
-        // Use a more reliable price API with fallback
-        const res = await fetchWithRetry(`https://api.dexscreener.com/latest/dex/tokens/${mintAddress}`);
-        const data = await res.json();
+        // Simple price fetch without complex error handling
+        const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${TOKEN_MINT}`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
         
         if (data.pairs && data.pairs.length > 0) {
             const pair = data.pairs[0];
             const price = parseFloat(pair.priceUsd) || 0;
             const isNewATH = price > allTimeHighPrice;
             
-            if (isNewATH) {
+            if (isNewATH && price > 0) {
                 allTimeHighPrice = price;
                 logToConsole(`🚀 NEW ALL-TIME HIGH: $${price.toFixed(8)}`, 'success');
             }
             
-            return { 
-                price, 
-                timestamp: Date.now(), 
-                isNewATH,
-                priceChange24h: pair.priceChange?.h24 || 0
-            };
+            currentPrice = price;
+            priceChange24h = pair.priceChange?.h24 || 0;
+            
+            return true;
         }
-        return null;
+        return false;
     } catch (e) {
-        logToConsole(`Error fetching token price: ${e.message}`, 'error');
-        return null;
+        // Silent fail - don't log every price fetch error
+        return false;
     }
 }
 
-async function getFullTransactionDetails(signature) {
+async function getTransactionDetails(signature) {
     try {
         const tx = await connection.getTransaction(signature, {
             commitment: "confirmed",
             maxSupportedTransactionVersion: 0
         });
-        if (!tx) return null;
-        
-        const meta = tx.meta || {};
-        const transaction = tx.transaction || {};
-        const message = transaction.message || {};
-        const accountKeys = message.accountKeys || [];
-        
-        const fullDetails = {
-            signature: signature,
-            slot: tx.slot || 0,
-            blockTime: tx.blockTime ? new Date(tx.blockTime * 1000).toISOString() : null,
-            timestamp: tx.blockTime ? tx.blockTime * 1000 : null,
-            fee: meta.fee ? meta.fee / LAMPORTS_PER_SOL : 0,
-            status: meta.err ? 'failed' : 'success',
-            error: meta.err || null,
-            accounts: accountKeys.map((account, index) => ({
-                pubkey: account?.pubkey?.toString() || 'unknown',
-                signer: account?.signer || false,
-                writable: account?.writable || false,
-                preBalance: meta.preBalances?.[index] ? meta.preBalances[index] / LAMPORTS_PER_SOL : 0,
-                postBalance: meta.postBalances?.[index] ? meta.postBalances[index] / LAMPORTS_PER_SOL : 0,
-                balanceChange: meta.preBalances?.[index] && meta.postBalances?.[index] 
-                    ? (meta.postBalances[index] - meta.preBalances[index]) / LAMPORTS_PER_SOL 
-                    : 0
-            })),
-        };
-        return fullDetails;
+        return tx;
     } catch (e) {
-        logToConsole(`Error getting transaction details: ${e.message}`, 'error');
         return null;
     }
 }
@@ -279,41 +253,27 @@ function calculateSolSpent(tx) {
         let solSpent = 0;
         let buyer = null;
         
-        const feePayerIndex = 0;
-        if (meta.preBalances && meta.postBalances && meta.preBalances.length > feePayerIndex) {
-            const preBalance = meta.preBalances[feePayerIndex] / LAMPORTS_PER_SOL;
-            const postBalance = meta.postBalances[feePayerIndex] / LAMPORTS_PER_SOL;
-            const fee = meta.fee / LAMPORTS_PER_SOL;
-            const spent = preBalance - postBalance - fee;
-            
-            if (spent > 0.001) {
-                solSpent = spent;
-                buyer = accountKeys[feePayerIndex]?.pubkey?.toString() || null;
-            }
-        }
-        
-        if (solSpent === 0) {
-            for (let i = 0; i < accountKeys.length; i++) {
-                if (meta.preBalances?.[i] && meta.postBalances?.[i]) {
-                    const balanceChange = (meta.postBalances[i] - meta.preBalances[i]) / LAMPORTS_PER_SOL;
-                    
-                    if (balanceChange < -0.005) {
-                        solSpent = Math.abs(balanceChange);
-                        buyer = accountKeys[i]?.pubkey?.toString() || buyer;
-                        break;
-                    }
+        // Simple calculation - look for significant SOL decreases
+        for (let i = 0; i < accountKeys.length; i++) {
+            if (meta.preBalances?.[i] && meta.postBalances?.[i]) {
+                const balanceChange = (meta.postBalances[i] - meta.preBalances[i]) / LAMPORTS_PER_SOL;
+                
+                if (balanceChange < -0.001) { // Lower threshold to catch more transactions
+                    solSpent = Math.abs(balanceChange);
+                    buyer = accountKeys[i]?.pubkey?.toString() || buyer;
+                    break;
                 }
             }
         }
         
-        if (solSpent === 0 && meta.postTokenBalances) {
-            solSpent = meta.fee ? meta.fee / LAMPORTS_PER_SOL : 0.0001;
+        // If no significant change found, use fee as minimum
+        if (solSpent === 0 && meta.fee) {
+            solSpent = meta.fee / LAMPORTS_PER_SOL;
             buyer = accountKeys[0]?.pubkey?.toString() || null;
         }
         
         return { solSpent: Math.max(solSpent, 0.0001), buyer };
     } catch (e) {
-        logToConsole(`Error calculating SOL spent: ${e.message}`, 'error');
         return { solSpent: 0.0001, buyer: null };
     }
 }
@@ -321,58 +281,46 @@ function calculateSolSpent(tx) {
 async function monitorNewTokenTransactions() {
     try {
         const mintPublicKey = new PublicKey(TOKEN_MINT);
-        const signatures = await connection.getSignaturesForAddress(mintPublicKey, { limit: 10 });
-        const newPurchases = [];
+        const signatures = await connection.getSignaturesForAddress(mintPublicKey, { limit: 5 }); // Reduced limit
         
         for (const sig of signatures) {
             if (processedTransactions.has(sig.signature)) continue;
             
             try {
-                const tx = await connection.getTransaction(sig.signature, {
-                    commitment: "confirmed",
-                    maxSupportedTransactionVersion: 0
-                });
-                
+                const tx = await getTransactionDetails(sig.signature);
                 if (!tx || !tx.meta || tx.meta.err) {
                     processedTransactions.add(sig.signature);
                     continue;
                 }
                 
                 const txTime = tx.blockTime ? tx.blockTime * 1000 : 0;
-                const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+                const threeMinutesAgo = Date.now() - 3 * 60 * 1000; // Reduced to 3 minutes
                 
-                if (txTime < fiveMinutesAgo) {
+                if (txTime < threeMinutesAgo) {
                     processedTransactions.add(sig.signature);
                     continue;
                 }
                 
-                const fullTxDetails = await getFullTransactionDetails(sig.signature);
-                if (fullTxDetails) fullTransactions.push(fullTxDetails);
-                
-                const purchase = await analyzeTokenPurchase(tx, sig.signature, fullTxDetails);
+                const purchase = await analyzeTokenPurchase(tx, sig.signature);
                 if (purchase) {
                     processedTransactions.add(sig.signature);
-                    newPurchases.push(purchase);
+                    return purchase; // Return first valid purchase found
                 } else {
                     processedTransactions.add(sig.signature);
                 }
                 
-                await new Promise(r => setTimeout(r, 500));
             } catch (e) {
-                logToConsole(`Error processing transaction ${sig.signature}: ${e.message}`, 'error');
                 processedTransactions.add(sig.signature);
             }
         }
         
-        if (newPurchases.length > 0) broadcastUpdate();
-        return newPurchases;
+        return null;
     } catch (e) {
-        logToConsole(`Error monitoring transactions: ${e.message}`, 'error');
-        return [];
+        return null;
     }
 }
 
-async function analyzeTokenPurchase(tx, signature, fullTxDetails = null) {
+async function analyzeTokenPurchase(tx, signature) {
     try {
         if (!tx?.meta || !tx?.transaction) return null;
         
@@ -385,12 +333,9 @@ async function analyzeTokenPurchase(tx, signature, fullTxDetails = null) {
         if (tokenTransfers.length === 0) return null;
         
         const { solSpent, buyer } = calculateSolSpent(tx);
-        const accountKeys = tx.transaction.message?.accountKeys || [];
-        const accountAddresses = accountKeys.map(account => ({
-            pubkey: account?.pubkey?.toString() || 'unknown',
-            signer: account?.signer || false,
-            writable: account?.writable || false
-        }));
+        
+        // Only process significant purchases
+        if (solSpent < 0.0005) return null;
         
         const purchases = [];
         for (const transfer of tokenTransfers) {
@@ -399,37 +344,23 @@ async function analyzeTokenPurchase(tx, signature, fullTxDetails = null) {
             
             if (recentHolders.has(wallet)) continue;
             
-            let pricePerToken = 0;
-            if (solSpent > 0 && tokenAmount > 0) {
-                pricePerToken = solSpent / tokenAmount;
-            }
-            
             const purchaseDetails = {
                 wallet: wallet,
-                buyerAddress: buyer,
                 signature: signature,
-                timestamp: tx.blockTime ? new Date(tx.blockTime * 1000).toISOString() : "unknown",
+                timestamp: tx.blockTime ? new Date(tx.blockTime * 1000).toISOString() : new Date().toISOString(),
                 txTime: tx.blockTime ? tx.blockTime * 1000 : Date.now(),
                 solAmount: solSpent,
                 tokenAmount: tokenAmount,
-                pricePerToken: pricePerToken,
-                marketPrice: 0,
-                isATHPurchase: false,
-                allAddresses: accountAddresses,
-                slot: tx.slot || 0,
-                fee: tx.meta.fee ? tx.meta.fee / LAMPORTS_PER_SOL : 0,
                 isMillionTokenHolder: majorHolders.has(wallet) && majorHolders.get(wallet).tokens >= MIN_TOKENS_FOR_GUARANTEED_GREEN,
                 holderTokens: majorHolders.has(wallet) ? majorHolders.get(wallet).tokens : 0
             };
             
-            if (fullTxDetails) purchaseDetails.fullTransaction = fullTxDetails;
             purchases.push(purchaseDetails);
             recentHolders.add(wallet);
         }
         
         return purchases.length > 0 ? purchases : null;
     } catch (e) {
-        logToConsole(`Error analyzing purchase: ${e.message}`, 'error');
         return null;
     }
 }
@@ -442,13 +373,13 @@ function processGameBlock(purchase) {
     // 1M+ token holders get 1 guaranteed green block
     if (purchase.isMillionTokenHolder) {
         blocksToOpen = Math.max(blocksToOpen, 1);
-        logToConsole(`🏦 1M+ TOKEN HOLDER: ${purchase.wallet} (${purchase.holderTokens.toLocaleString()} tokens) gets 1 guaranteed green block`, 'success');
+        logToConsole(`🏦 1M+ HOLDER: ${purchase.wallet.substring(0, 8)}... (${purchase.holderTokens.toLocaleString()} tokens) gets guaranteed green`, 'success');
     }
     
     const actualBlocksToOpen = Math.min(blocksToOpen, TOTAL_BLOCKS - currentBlockIndex);
     
-    if (actualBlocksToOpen > 0 && purchase.solAmount >= MIN_SOL_FOR_BLOCK) {
-        logToConsole(`💰 ${purchase.isMillionTokenHolder ? '🏦 1M+ HOLDER ' : ''}Wallet ${purchase.wallet} bought ${purchase.solAmount.toFixed(4)} SOL - Opening ${actualBlocksToOpen} blocks`, 'info');
+    if (actualBlocksToOpen > 0) {
+        logToConsole(`💰 ${purchase.isMillionTokenHolder ? '🏦 ' : ''}${purchase.wallet.substring(0, 8)}... bought ${purchase.solAmount.toFixed(4)} SOL - Opening ${actualBlocksToOpen} blocks`, 'info');
         
         for (let i = 0; i < actualBlocksToOpen; i++) {
             if (currentBlockIndex >= TOTAL_BLOCKS) break;
@@ -481,26 +412,19 @@ function processGameBlock(purchase) {
                 });
                 
                 if (purchase.isMillionTokenHolder && i === 0) {
-                    logToConsole(`🎯 GUARANTEED GREEN BLOCK! 1M+ Holder ${purchase.wallet} won at block ${currentBlockIndex + 1}`, 'success');
+                    logToConsole(`🎯 GUARANTEED GREEN! 1M+ Holder won at block ${currentBlockIndex + 1}`, 'success');
                 } else {
-                    logToConsole(`🎯 GREEN BLOCK! Wallet: ${purchase.wallet} won at block ${currentBlockIndex + 1}`, 'success');
+                    logToConsole(`🎯 GREEN BLOCK! Won at block ${currentBlockIndex + 1}`, 'success');
                 }
             } else {
-                logToConsole(`💥 RED BLOCK! Wallet: ${purchase.wallet} at block ${currentBlockIndex + 1}`, 'error');
+                logToConsole(`💥 RED BLOCK at block ${currentBlockIndex + 1}`, 'info'); // Changed from error to info
             }
             
             currentBlockIndex++;
             totalVolume += MIN_SOL_FOR_BLOCK;
             
             if (currentBlockIndex >= TOTAL_BLOCKS) {
-                gameCompleted = true;
-                previousWinners = [...winningWallets];
-                logToConsole(`🏆 GAME COMPLETED! ${winningWallets.length} winning wallets`, 'success');
-                logToConsole(`📋 Saving winners list and starting new game in 10 seconds...`, 'info');
-                
-                setTimeout(() => {
-                    startNewGame();
-                }, 10000);
+                completeGame();
                 break;
             }
         }
@@ -509,20 +433,19 @@ function processGameBlock(purchase) {
     }
 }
 
-function assignGuaranteedGreenBlocks() {
-    const millionHolders = Array.from(majorHolders.entries())
-        .filter(([wallet, data]) => data.tokens >= MIN_TOKENS_FOR_GUARANTEED_GREEN);
+function completeGame() {
+    gameCompleted = true;
+    previousWinners = [...winningWallets];
+    logToConsole(`🏆 GAME COMPLETED! ${winningWallets.length} winning blocks`, 'success');
+    logToConsole(`🔄 Starting new game in 10 seconds...`, 'info');
     
-    if (millionHolders.length === 0) {
-        logToConsole(`🔄 No 1M+ holders found yet, will retry in 5 seconds...`, 'info');
-        setTimeout(assignGuaranteedGreenBlocks, 5000);
-        return;
-    }
-    
-    logToConsole(`🎯 Assigned ${millionHolders.length} guaranteed green blocks for 1M+ token holders`, 'success');
+    setTimeout(() => {
+        startNewGame();
+    }, 10000);
 }
 
 function startNewGame() {
+    // Reset game state but keep previous winners
     gameBlocks = Array(TOTAL_BLOCKS).fill(null).map(() => ({ 
         status: 'hidden', 
         color: null, 
@@ -531,13 +454,16 @@ function startNewGame() {
     currentBlockIndex = 0;
     gameCompleted = false;
     winningWallets = [];
+    totalVolume = 0;
     
-    // Assign guaranteed green blocks for 1M+ holders at game start
-    assignGuaranteedGreenBlocks();
+    // Clear old data but keep recent console messages
+    consoleMessages = consoleMessages.slice(-20);
+    processedTransactions.clear();
+    recentHolders.clear();
     
     logToConsole(`🔄 NEW GAME STARTED! 100 blocks ready`, 'success');
-    logToConsole(`🎯 1M+ token holders get 1 guaranteed green block per game`, 'info');
-    logToConsole(`📊 Regular blocks: 33% green chance, 67% red chance`, 'info');
+    logToConsole(`🎯 1M+ token holders get 1 guaranteed green block`, 'info');
+    logToConsole(`📊 Regular blocks: ${GREEN_CHANCE * 100}% green chance`, 'info');
     broadcastUpdate();
 }
 
@@ -894,10 +820,10 @@ app.get("/", (req, res) => {
                 • Each 0.1 SOL spent opens 1 block<br>
                 • 1M+ token holders get 1 GUARANTEED green block per game<br>
                 • Regular blocks: 33% green chance, 67% red chance<br>
-                • Green blocks = WIN! Red blocks = LOSE<br>
+                • Green blocks = WIN! Red blocks = continue playing<br>
                 • Game completes when all 100 blocks are opened<br>
-                • 1M+ holders: automatically assigned green block at game start<br>
-                • If no holder data, system retries every 5 seconds
+                • Data resets automatically after each game<br>
+                • Only current and previous game data stored in memory
             </div>
         </div>
         
@@ -936,8 +862,8 @@ app.get("/", (req, res) => {
                 <div class="stat-value" id="current-price">$0.00000000</div>
             </div>
             <div class="stat-card">
-                <div class="stat-label">GREEN CHANCE</div>
-                <div class="stat-value" id="green-chance">33%</div>
+                <div class="stat-label">BLOCKS LEFT</div>
+                <div class="stat-value" id="blocks-left">100</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">1M+ HOLDERS</div>
@@ -994,8 +920,8 @@ app.get("/", (req, res) => {
                 \`\${gameData.currentBlockIndex}/\${gameData.totalBlocks} Blocks (\${gameData.progress.toFixed(1)}%)\`;
             
             document.getElementById('total-volume').textContent = stats.totalVolume.toFixed(2) + ' SOL';
-            document.getElementById('current-price').textContent = '\$' + stats.lastPrice.toFixed(8);
-            document.getElementById('green-chance').textContent = stats.greenChance + '%';
+            document.getElementById('current-price').textContent = '\$' + stats.currentPrice.toFixed(8);
+            document.getElementById('blocks-left').textContent = stats.blocksRemaining;
             document.getElementById('million-holders').textContent = stats.millionTokenHolders.length;
             
             gameData.blocks.forEach((block, index) => {
@@ -1027,16 +953,15 @@ app.get("/", (req, res) => {
                         window.open(\`https://solscan.io/tx/\${block.purchase.signature}\`, '_blank');
                     };
                     blockElement.style.cursor = 'pointer';
-                    blockElement.title = \`Click to view transaction\\nWallet: \${block.purchase.wallet}\\nBlock Value: \${solAmount} SOL\\nTotal Purchase: \${block.purchase.solAmount.toFixed(4)} SOL\\nBlock: \${index + 1}\${block.isGuaranteedGreen ? '\\n🏦 GUARANTEED GREEN (1M+ holder)' : ''}\`;
                 } else {
                     blockElement.className = 'block hidden';
                     blockElement.innerHTML = '<span class="block-number">' + (index + 1) + '</span>';
                     blockElement.onclick = null;
                     blockElement.style.cursor = 'default';
-                    blockElement.title = 'Hidden Block';
                 }
             });
             
+            // Update holders, winners, etc. (same as before)
             if (stats.millionTokenHolders && stats.millionTokenHolders.length > 0) {
                 document.getElementById('holders-section').style.display = 'block';
                 const holdersList = document.getElementById('holders-list');
@@ -1047,13 +972,10 @@ app.get("/", (req, res) => {
                         </div>
                         <div class="holder-details">
                             <span style="color: #ff00ff">\${holder.tokens.toLocaleString()} Tokens</span> | 
-                            \${holder.percentage.toFixed(2)}% Supply | 
-                            Guaranteed: 1 Green Block
+                            \${holder.percentage.toFixed(2)}% Supply
                         </div>
                     </div>
                 \`).join('');
-            } else {
-                document.getElementById('holders-section').style.display = 'none';
             }
             
             if (gameData.winningWallets.length > 0) {
@@ -1065,15 +987,10 @@ app.get("/", (req, res) => {
                             <a href="https://solscan.io/account/\${winner.wallet}" target="_blank">\${winner.wallet}\${winner.isMillionTokenHolder ? ' 🏦' : ''}</a>
                         </div>
                         <div class="winner-details">
-                            <a href="https://solscan.io/tx/\${winner.signature}" target="_blank" title="View Transaction">📝 TX</a>
-                            <a href="https://solscan.io/account/\${winner.wallet}" target="_blank" title="View Account">👤 Account</a>
-                            Block SOL: \${winner.solAmount.toFixed(4)} | Total Purchase: \${winner.totalPurchaseAmount.toFixed(4)} SOL | Block: \${winner.blockNumber} | Time: \${new Date(winner.timestamp).toLocaleTimeString()}
-                            \${winner.isMillionTokenHolder ? \` | 🏦 \${winner.holderTokens.toLocaleString()} tokens\` : ''}
+                            Block: \${winner.blockNumber} | SOL: \${winner.solAmount.toFixed(4)}
                         </div>
                     </div>
                 \`).join('');
-            } else {
-                document.getElementById('winners-section').style.display = 'none';
             }
             
             if (gameData.previousWinners.length > 0) {
@@ -1085,21 +1002,15 @@ app.get("/", (req, res) => {
                             <a href="https://solscan.io/account/\${winner.wallet}" target="_blank">\${winner.wallet}\${winner.isMillionTokenHolder ? ' 🏦' : ''}</a>
                         </div>
                         <div class="winner-details">
-                            SOL: \${winner.solAmount.toFixed(4)} | Total: \${winner.totalPurchaseAmount.toFixed(4)} SOL | Block: \${winner.blockNumber}
+                            Block: \${winner.blockNumber} | SOL: \${winner.solAmount.toFixed(4)}
                         </div>
                     </div>
                 \`).join('');
-            } else {
-                document.getElementById('previous-winners-section').style.display = 'none';
-            }
-            
-            if (gameData.gameCompleted) {
-                document.getElementById('progress-text').innerHTML += ' <span style="color:#ffff00">🏆 GAME COMPLETED!</span>';
             }
             
             const consoleOutput = document.getElementById('console-output');
             consoleOutput.innerHTML = '';
-            consoleMessages.slice(-15).forEach(msg => {
+            consoleMessages.forEach(msg => {
                 const line = document.createElement('div');
                 line.className = 'console-line console-' + msg.type;
                 line.textContent = '[' + new Date(msg.timestamp).toLocaleTimeString() + '] ' + msg.message;
@@ -1126,76 +1037,53 @@ server.listen(PORT, () => {
     logToConsole(`🎮 Minesweeper ATH Game Started - ${TOTAL_BLOCKS} blocks`, 'info');
     logToConsole(`⚡ Each 0.1 SOL opens 1 block`, 'info');
     logToConsole(`🏦 1M+ token holders get 1 guaranteed green block per game`, 'info');
-    logToConsole(`🎯 Regular blocks: 33% green chance, 67% red chance`, 'info');
+    logToConsole(`📊 Regular blocks: ${GREEN_CHANCE * 100}% green chance`, 'info');
 });
 
-async function initializeTokenData() {
+async function initialize() {
     try {
-        logToConsole(`📊 Fetching token supply and 1M+ token holders...`, 'info');
+        logToConsole(`📊 Initializing token data...`, 'info');
         await fetchTokenSupply();
         await fetchMajorHolders();
-        logToConsole(`✅ Token data initialized - Supply: ${tokenSupply.toLocaleString()} tokens`, 'success');
+        logToConsole(`✅ Token data initialized`, 'success');
     } catch (e) {
-        logToConsole(`Error initializing token data: ${e.message}`, 'error');
+        logToConsole(`Error initializing: ${e.message}`, 'error');
     }
 }
 
-async function loop() {
-    await initializeTokenData();
+async function mainLoop() {
+    await initialize();
     
-    // Refresh token data every 30 minutes
+    // Refresh token data every 15 minutes
     setInterval(async () => {
         await fetchTokenSupply();
         await fetchMajorHolders();
-    }, 30 * 60 * 1000);
+    }, 15 * 60 * 1000);
     
-    let currentPriceData = null;
+    // Price update every 30 seconds
+    setInterval(async () => {
+        await fetchTokenPrice();
+    }, 30000);
+    
+    // Main transaction monitoring loop
     while (true) {
         try {
-            const priceResult = await fetchTokenPrice(TOKEN_MINT);
-            if (priceResult) {
-                currentPriceData = priceResult;
-                priceHistory.push(priceResult);
-                if (priceHistory.length > 1000) priceHistory.shift();
-                broadcastUpdate();
-            }
-            
-            const newPurchases = await monitorNewTokenTransactions();
-            if (newPurchases.length > 0 && currentPriceData) {
-                for (const purchaseGroup of newPurchases) {
-                    if (!purchaseGroup) continue;
-                    for (const purchase of purchaseGroup) {
-                        purchase.marketPrice = currentPriceData.price;
-                        purchase.isATHPurchase = currentPriceData.isNewATH;
-                        purchase.isMillionTokenHolder = majorHolders.has(purchase.wallet) && majorHolders.get(purchase.wallet).tokens >= MIN_TOKENS_FOR_GUARANTEED_GREEN;
-                        purchase.holderTokens = majorHolders.has(purchase.wallet) ? majorHolders.get(purchase.wallet).tokens : 0;
-                        athPurchases.push(purchase);
-                        
-                        processGameBlock(purchase);
-                        
-                        if (purchase.isATHPurchase) {
-                            logToConsole(`🎯 ATH Purchase: ${purchase.wallet} - ${purchase.solAmount.toFixed(4)} SOL`, 'success');
-                        }
-                    }
+            const newPurchase = await monitorNewTokenTransactions();
+            if (newPurchase) {
+                for (const purchase of newPurchase) {
+                    processGameBlock(purchase);
                 }
                 broadcastUpdate();
             }
-            
-            if (processedTransactions.size > 10000) {
-                const toRemove = Array.from(processedTransactions).slice(0, 5000);
-                toRemove.forEach(sig => processedTransactions.delete(sig));
-            }
-            if (recentHolders.size > 5000) {
-                recentHolders.clear();
-            }
         } catch (e) {
-            logToConsole(`Error in main loop: ${e.message}`, 'error');
+            // Silent error - don't spam console
         }
+        
         await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
     }
 }
 
-loop().catch(e => {
+mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
