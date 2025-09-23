@@ -22,8 +22,7 @@ let gameBlocks = Array(TOTAL_BLOCKS).fill(null).map(() => ({
     color: null, 
     purchase: null,
     assignedHolder: null,
-    isGuaranteedGreen: false,
-    isRevealedAsGreen: false // Track if guaranteed block was revealed as green
+    isGuaranteedGreen: false
 }));
 let currentBlockIndex = 0;
 let gameCompleted = false;
@@ -56,7 +55,6 @@ function broadcastUpdate() {
 }
 
 function getCurrentDashboardData() {
-    // Count actual revealed green blocks + guaranteed green blocks that are still valid
     const revealedGreenBlocks = gameBlocks.filter(block => 
         block.status === 'revealed' && block.color === 'green'
     ).length;
@@ -250,7 +248,7 @@ function assignGuaranteedGreenBlocks() {
                     gameBlocks[i].isGuaranteedGreen = true;
                     assignedHoldersThisGame.add(wallet);
                     newlyAssigned++;
-                    logToConsole(`🎯 Assigned guaranteed GREEN block ${i + 1} to 1M+ holder ${wallet.substring(0, 8)}...`, 'success');
+                    logToConsole(`🎯 Assigned guaranteed GREEN block ${i + 1} to ${wallet.substring(0, 8)}...`, 'success');
                     break;
                 }
             }
@@ -258,7 +256,7 @@ function assignGuaranteedGreenBlocks() {
     }
     
     if (newlyAssigned > 0) {
-        logToConsole(`✅ Assigned ${newlyAssigned} new guaranteed GREEN blocks to 1M+ holders`, 'success');
+        logToConsole(`✅ Assigned ${newlyAssigned} new guaranteed GREEN blocks`, 'success');
     }
     
     return newlyAssigned;
@@ -280,18 +278,17 @@ function validateGuaranteedBlocks() {
                     block.isGuaranteedGreen = false;
                     assignedHoldersThisGame.delete(holderWallet);
                     invalidatedBlocks++;
-                    logToConsole(`❌ Removed guaranteed GREEN block ${i + 1} from ${holderWallet.substring(0, 8)}... (no longer 1M+ holder)`, 'error');
+                    logToConsole(`❌ Removed guaranteed block ${i + 1} from ${holderWallet.substring(0, 8)}... (no longer 1M+ holder)`, 'error');
                 } else if (block.status === 'revealed') {
                     // Block already revealed - mark guaranteed status as invalid
                     block.isGuaranteedGreen = false;
-                    logToConsole(`⚠️ Guaranteed block ${i + 1} was used but holder ${holderWallet.substring(0, 8)}... lost tokens`, 'warning');
                 }
             }
         }
     }
     
     if (invalidatedBlocks > 0) {
-        logToConsole(`🔄 Freed ${invalidatedBlocks} guaranteed GREEN blocks from former 1M+ holders`, 'info');
+        logToConsole(`🔄 Freed ${invalidatedBlocks} guaranteed blocks from former 1M+ holders`, 'info');
     }
     
     return invalidatedBlocks;
@@ -430,12 +427,13 @@ async function analyzeTokenPurchase(tx, signature) {
 function processGameBlock(purchase) {
     if (gameCompleted || currentBlockIndex >= TOTAL_BLOCKS) return;
     
+    // Calculate how many blocks to open based on SOL spent (0.1 SOL = 1 block)
     let blocksToOpen = Math.floor(purchase.solAmount / MIN_SOL_FOR_BLOCK);
     
-    // 1M+ token holders get priority
+    // 1M+ token holders get at least 1 block
     if (purchase.isMillionTokenHolder) {
         blocksToOpen = Math.max(blocksToOpen, 1);
-        logToConsole(`🏦 1M+ HOLDER: ${purchase.wallet.substring(0, 8)}... (${purchase.holderTokens.toLocaleString()} tokens) gets priority`, 'success');
+        logToConsole(`🏦 1M+ HOLDER: ${purchase.wallet.substring(0, 8)}... buying ${blocksToOpen} blocks`, 'success');
     }
     
     const actualBlocksToOpen = Math.min(blocksToOpen, TOTAL_BLOCKS - currentBlockIndex);
@@ -450,21 +448,14 @@ function processGameBlock(purchase) {
             let blockColor = 'red';
             let isGuaranteed = false;
             
-            // Check if this block is assigned as guaranteed green to this wallet
+            // Check if this block is guaranteed for this wallet
             if (currentBlock.assignedHolder === purchase.wallet && currentBlock.isGuaranteedGreen) {
-                blockColor = 'green';
+                blockColor = 'green'; // Guaranteed green for the assigned holder
                 isGuaranteed = true;
                 assignedHoldersThisGame.delete(purchase.wallet);
-                logToConsole(`🎯 GUARANTEED GREEN! 1M+ Holder ${purchase.wallet.substring(0, 8)}... claimed their guaranteed block ${currentBlockIndex + 1}`, 'success');
-            } 
-            // If this wallet is a 1M+ holder but doesn't have a guaranteed block assigned yet
-            else if (purchase.isMillionTokenHolder && i === 0 && !assignedHoldersThisGame.has(purchase.wallet)) {
-                blockColor = 'green';
-                isGuaranteed = true;
-                logToConsole(`🎯 BONUS GREEN! 1M+ Holder ${purchase.wallet.substring(0, 8)}... got green block ${currentBlockIndex + 1}`, 'success');
-            } 
-            // Regular block - random chance
-            else {
+                logToConsole(`🎯 GUARANTEED GREEN! ${purchase.wallet.substring(0, 8)}... claimed their block ${currentBlockIndex + 1}`, 'success');
+            } else {
+                // Regular block - calculate random chance at the moment of purchase
                 blockColor = Math.random() < GREEN_CHANCE ? 'green' : 'red';
             }
             
@@ -474,8 +465,7 @@ function processGameBlock(purchase) {
                 purchase: purchase,
                 blockValue: MIN_SOL_FOR_BLOCK,
                 assignedHolder: currentBlock.assignedHolder,
-                isGuaranteedGreen: isGuaranteed,
-                isRevealedAsGreen: blockColor === 'green'
+                isGuaranteedGreen: isGuaranteed
             };
             
             if (blockColor === 'green') {
@@ -492,9 +482,9 @@ function processGameBlock(purchase) {
                 });
                 
                 if (isGuaranteed) {
-                    logToConsole(`✅ GUARANTEED GREEN BLOCK CONFIRMED at block ${currentBlockIndex + 1}`, 'success');
+                    logToConsole(`✅ GUARANTEED GREEN at block ${currentBlockIndex + 1}`, 'success');
                 } else {
-                    logToConsole(`🎯 REGULAR GREEN BLOCK at block ${currentBlockIndex + 1}`, 'success');
+                    logToConsole(`🎯 REGULAR GREEN at block ${currentBlockIndex + 1}`, 'success');
                 }
             } else {
                 logToConsole(`💥 RED BLOCK at block ${currentBlockIndex + 1}`, 'info');
@@ -534,8 +524,7 @@ function startNewGame() {
         color: null, 
         purchase: null,
         assignedHolder: null,
-        isGuaranteedGreen: false,
-        isRevealedAsGreen: false
+        isGuaranteedGreen: false
     }));
     currentBlockIndex = 0;
     gameCompleted = false;
@@ -548,10 +537,10 @@ function startNewGame() {
     recentHolders.clear();
     
     logToConsole(`🔄 NEW GAME STARTED! 100 blocks ready`, 'success');
-    logToConsole(`🎯 1M+ token holders get guaranteed GREEN blocks counted in progress`, 'info');
-    logToConsole(`📊 Progress bar shows: Revealed GREEN + Valid Guaranteed GREEN blocks`, 'info');
+    logToConsole(`🎯 1M+ holders get guaranteed GREEN blocks assigned automatically`, 'info');
+    logToConsole(`📊 Regular blocks: ${GREEN_CHANCE * 100}% green chance (calculated at purchase time)`, 'info');
     
-    // Immediately assign guaranteed blocks for current 1M+ holders
+    // Assign guaranteed blocks for current 1M+ holders
     assignGuaranteedGreenBlocks();
     broadcastUpdate();
 }
@@ -562,7 +551,7 @@ app.get("/", (req, res) => {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>MINESWEEPER ATH GAME - GUARANTEED GREEN BLOCKS</title>
+    <title>MINESWEEPER ATH - REAL-TIME BLOCK SYSTEM</title>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <style>
@@ -640,10 +629,11 @@ app.get("/", (req, res) => {
             text-align: center;
             font-weight: 700;
             color: #00ffff;
+            font-size: 14px;
         }
         .progress-details {
             text-align: center;
-            font-size: 11px;
+            font-size: 12px;
             color: #00ff41;
             opacity: 0.8;
             margin-top: 5px;
@@ -669,6 +659,7 @@ app.get("/", (req, res) => {
             background: #1a1a1a;
             position: relative;
             overflow: hidden;
+            font-size: 14px;
         }
         .block.hidden {
             background: #2a2a2a;
@@ -694,56 +685,55 @@ app.get("/", (req, res) => {
             color: #000;
             border-color: #00cc33;
             box-shadow: 0 0 15px #00ff41;
+            font-size: 16px;
+            font-weight: bold;
         }
         .block.revealed.red {
             background: #ff4444;
             color: #000;
             border-color: #cc3333;
             box-shadow: 0 0 15px #ff4444;
+            font-size: 16px;
+            font-weight: bold;
         }
         .block.revealed.green.guaranteed {
             background: linear-gradient(45deg, #00ff41, #ffff00);
             box-shadow: 0 0 20px #ffff00;
             border-color: #ffff00;
+            font-size: 16px;
+            font-weight: bold;
         }
         .block-number {
-            font-size: 10px;
+            font-size: 12px;
             opacity: 0.7;
+            font-weight: bold;
         }
         .block-wallet {
-            font-size: 8px;
+            font-size: 10px;
             position: absolute;
             bottom: 2px;
             left: 2px;
             right: 2px;
             text-align: center;
             background: rgba(0, 0, 0, 0.7);
-            padding: 1px;
+            padding: 2px;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            font-weight: bold;
         }
         .block-sol {
-            font-size: 9px;
+            font-size: 11px;
             position: absolute;
             top: 2px;
             right: 2px;
             background: rgba(0, 0, 0, 0.7);
-            padding: 1px 3px;
+            padding: 2px 4px;
             border-radius: 3px;
-        }
-        .block-multiplier {
-            font-size: 8px;
-            position: absolute;
-            top: 2px;
-            left: 2px;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 1px 3px;
-            border-radius: 3px;
-            color: #ffff00;
+            font-weight: bold;
         }
         .block-guaranteed {
-            font-size: 8px;
+            font-size: 10px;
             position: absolute;
             bottom: 12px;
             left: 2px;
@@ -751,19 +741,30 @@ app.get("/", (req, res) => {
             text-align: center;
             background: rgba(255, 255, 0, 0.9);
             color: #000;
-            padding: 1px;
-            font-weight: 700;
+            padding: 2px;
+            font-weight: bold;
         }
         .block-assigned {
-            font-size: 6px;
+            font-size: 8px;
             position: absolute;
             top: 2px;
             left: 2px;
             background: rgba(0, 255, 0, 0.9);
             color: #000;
-            padding: 1px 2px;
+            padding: 2px 3px;
             border-radius: 2px;
-            font-weight: 700;
+            font-weight: bold;
+        }
+        .block-holder {
+            font-size: 9px;
+            position: absolute;
+            bottom: 15px;
+            left: 2px;
+            right: 2px;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 1px;
+            font-weight: bold;
         }
         .winners-section {
             margin: 20px 0;
@@ -851,6 +852,7 @@ app.get("/", (req, res) => {
             font-weight: 700;
             margin-bottom: 5px;
             word-break: break-all;
+            font-size: 12px;
         }
         .winner-wallet a, .holder-wallet a {
             color: inherit;
@@ -960,19 +962,18 @@ app.get("/", (req, res) => {
     
     <div class="terminal-container">
         <div class="game-header">
-            🎮 MINESWEEPER ATH - GUARANTEED GREEN BLOCKS COUNTED 🎮
+            🎮 MINESWEEPER ATH - REAL-TIME BLOCK SYSTEM 🎮
         </div>
         
         <div class="game-rules">
-            <div class="rules-title">🎯 GUARANTEED GREEN BLOCKS SYSTEM</div>
+            <div class="rules-title">🎯 REAL-TIME BLOCK SYSTEM</div>
             <div class="rules-list">
-                • Each 0.1 SOL spent opens 1 block<br>
-                • 1M+ token holders get GUARANTEED GREEN blocks automatically assigned<br>
-                • Progress bar counts: REVEALED GREEN + VALID GUARANTEED GREEN blocks<br>
-                • Guaranteed blocks turn RED if holder drops below 1M tokens<br>
-                • Assigned blocks pulse green until revealed or invalidated<br>
-                • Game completes when total green blocks (revealed + guaranteed) reach 100<br>
-                • Real-time holder validation every 25 seconds
+                • Each 0.1 SOL spent opens 1 block (0.5 SOL = 5 blocks, 0.72 SOL = 7 blocks)<br>
+                • 1M+ token holders: GUARANTEED GREEN blocks assigned automatically<br>
+                • Regular blocks: ${GREEN_CHANCE * 100}% green chance (calculated at purchase time)<br>
+                • Guaranteed blocks show assigned wallet address clearly<br>
+                • Real-time holder validation - blocks turn red if holder loses tokens<br>
+                • Progress counts: Revealed + Valid Guaranteed green blocks
             </div>
         </div>
         
@@ -1022,7 +1023,7 @@ app.get("/", (req, res) => {
         </div>
         
         <div class="console-section" id="console-output">
-            <div class="console-line console-info">Initializing Guaranteed Green Blocks System...</div>
+            <div class="console-line console-info">Initializing Real-Time Block System...</div>
         </div>
     </div>
 
@@ -1086,14 +1087,14 @@ app.get("/", (req, res) => {
                     blockClass += ' revealed ' + block.color;
                     if (block.isGuaranteedGreen) blockClass += ' guaranteed';
                     
-                    const shortWallet = block.purchase?.wallet ? block.purchase.wallet.substring(0, 4) + '...' + block.purchase.wallet.substring(block.purchase.wallet.length - 4) : 'Unknown';
+                    const shortWallet = block.purchase?.wallet ? block.purchase.wallet.substring(0, 6) + '...' + block.purchase.wallet.substring(block.purchase.wallet.length - 4) : 'Unknown';
                     const solAmount = block.blockValue ? block.blockValue.toFixed(4) : '0.1000';
                     
                     let blockContent = \`
                         <span class="block-number">\${index + 1}</span>
                         <div class="block-wallet" title="\${block.purchase?.wallet || 'Unknown'}">\${shortWallet}</div>
                         <div class="block-sol" title="\${solAmount} SOL">\${solAmount} SOL</div>
-                        \${block.color === 'green' ? '🎯' : '💥'}
+                        \${block.color === 'green' ? '🎯 GREEN' : '💥 RED'}
                     \`;
                     
                     if (block.isGuaranteedGreen) {
@@ -1111,12 +1112,18 @@ app.get("/", (req, res) => {
                     blockClass += ' hidden';
                     if (block.assignedHolder && block.isGuaranteedGreen) {
                         blockClass += ' assigned';
+                        const shortWallet = block.assignedHolder.substring(0, 6) + '...' + block.assignedHolder.substring(block.assignedHolder.length - 4);
                         blockElement.innerHTML = \`
                             <span class="block-number">\${index + 1}</span>
-                            <div class="block-assigned" title="Guaranteed Green Block assigned to 1M+ holder">🏦 GREEN</div>
+                            <div class="block-assigned" title="Guaranteed Green Block">🏦 GUARANTEED</div>
+                            <div class="block-holder" title="Assigned to \${block.assignedHolder}">\${shortWallet}</div>
+                            <div style="color: #00ff00; font-size: 12px; margin-top: 5px; font-weight: bold;">GREEN</div>
                         \`;
                     } else {
-                        blockElement.innerHTML = '<span class="block-number">' + (index + 1) + '</span>';
+                        blockElement.innerHTML = \`
+                            <span class="block-number">\${index + 1}</span>
+                            <div style="color: #666; font-size: 10px; margin-top: 5px;">HIDDEN</div>
+                        \`;
                     }
                     blockElement.onclick = null;
                     blockElement.style.cursor = 'default';
@@ -1205,9 +1212,10 @@ app.get("/api/stats", (req, res) => {
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
     logToConsole(`🚀 Server running on port ${PORT}`, 'success');
-    logToConsole(`🎮 Minesweeper ATH with Guaranteed Green Blocks Started`, 'info');
-    logToConsole(`📊 Progress counts: Revealed GREEN + Valid Guaranteed GREEN blocks`, 'info');
-    logToConsole(`🏦 1M+ holders get automatic guaranteed GREEN blocks`, 'info');
+    logToConsole(`🎮 Minesweeper ATH with Real-Time Block System Started`, 'info');
+    logToConsole(`💰 0.1 SOL = 1 block | 0.5 SOL = 5 blocks | 0.72 SOL = 7 blocks`, 'info');
+    logToConsole(`🏦 1M+ holders get guaranteed GREEN blocks`, 'info');
+    logToConsole(`🎯 Regular blocks: ${GREEN_CHANCE * 100}% green chance (calculated at purchase)`, 'info');
 });
 
 async function initialize() {
