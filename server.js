@@ -41,11 +41,10 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 const wsClients = new Set();
-
 wss.on('connection', (ws) => {
     wsClients.add(ws);
     ws.on('close', () => wsClients.delete(ws));
-    ws.send(JSON.stringify(urrentDashboardData()));
+    ws.send(JSON.stringify(getCurrentDashboardData())); // Fixed the function name
 });
 
 function broadcastUpdate() {
@@ -1299,6 +1298,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
