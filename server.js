@@ -4,7 +4,7 @@ import { WebSocketServer } from 'ws';
 import http from 'http';
 
 const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
-const TOKEN_MINT = "4LK277DuJkKta8j41sXHdnvhmH3LLYwMjezXJE6jpump";
+const TOKEN_MINT = "4xVsawMYeSK7dPo9acp62bDFaDmrsCrSVXmEEBZrpump";
 const POLL_INTERVAL_MS = 3369;
 const MIN_SOL_FOR_BLOCK = 0.1;
 const TOTAL_BLOCKS = 100;
@@ -361,38 +361,79 @@ function calculateSolSpent(tx) {
 async function monitorNewTokenTransactions() {
     try {
         const mintPublicKey = new PublicKey(TOKEN_MINT);
-        const largestAccountsResult = await connection.getTokenLargestAccounts(mintPublicKey);
-        if (!largestAccountsResult || !largestAccountsResult.value || largestAccountsResult.value.length === 0) {
-            return null;
-        }
+        const largestAccounts = await connection.getTokenLargestAccounts(mintPublicKey);
+        
         let purchases = [];
-        for (const acct of largestAccountsResult.value) {
+        const batchPromises = [];
+        const accountsToProcess = [];
+
+        // First pass: filter accounts that need processing
+        for (const acct of largestAccounts.value) {
             const tokenAccountPubkey = acct.address;
-            if (processedTransactions.has(tokenAccountPubkey.toBase58())) {
+            const tokenAccountKey = tokenAccountPubkey.toBase58();
+            
+            // Skip if already processed or doesn't meet minimum threshold
+            if (processedTransactions.has(tokenAccountKey) || 
+                acct.uiAmount < MIN_TOKENS_FOR_GUARANTEED_GREEN) {
                 continue;
             }
-            const parsedAcct = await connection.getParsedAccountInfo(tokenAccountPubkey);
-            const owner = parsedAcct.value?.data?.parsed?.info?.owner;
-            const tokenAmount = acct.uiAmount;
-            if (owner && tokenAmount >= MIN_TOKENS_FOR_GUARANTEED_GREEN) {
-                purchases.push({
-                    wallet: owner,
-                    signature: "LARGE_ACCOUNT",
-                    timestamp: new Date().toISOString(),
-                    txTime: Date.now(),
-                    solAmount: 0.1,
-                    tokenAmount: tokenAmount,
-                    isMillionTokenHolder: isHolderStillQualified(owner),
-                    holderTokens: majorHolders.has(owner) ? majorHolders.get(owner).tokens : tokenAmount
-                });
-                processedTransactions.add(tokenAccountPubkey.toBase58());
+
+            accountsToProcess.push({ acct, tokenAccountKey });
+        }
+
+        // Process accounts in batches of 5 to avoid rate limiting
+        const BATCH_SIZE = 5;
+        for (let i = 0; i < accountsToProcess.length; i += BATCH_SIZE) {
+            const batch = accountsToProcess.slice(i, i + BATCH_SIZE);
+            const batchPromises = batch.map(({ acct, tokenAccountKey }) => 
+                processAccountBatch(acct.address, acct.uiAmount, tokenAccountKey)
+            );
+
+            // Wait for batch to complete
+            const batchResults = await Promise.allSettled(batchPromises);
+            
+            for (const result of batchResults) {
+                if (result.status === 'fulfilled' && result.value) {
+                    purchases.push(result.value);
+                }
+            }
+
+            // Add delay between batches to avoid rate limiting
+            if (i + BATCH_SIZE < accountsToProcess.length) {
+                await new Promise(r => setTimeout(r, 1000)); // 1 second delay
             }
         }
+
         return purchases.length > 0 ? purchases : null;
     } catch (e) {
         logToConsole(`Error in monitorNewTokenTransactions: ${e.message}`, 'error');
         return null;
     }
+}
+
+// Process individual account in batch
+async function processAccountBatch(tokenAccountPubkey, tokenAmount, tokenAccountKey) {
+    try {
+        const parsedAcct = await connection.getParsedAccountInfo(tokenAccountPubkey);
+        const owner = parsedAcct.value?.data?.parsed?.info?.owner;
+        
+        if (owner && tokenAmount >= MIN_TOKENS_FOR_GUARANTEED_GREEN) {
+            processedTransactions.add(tokenAccountKey);
+            return {
+                wallet: owner,
+                signature: `HOLDER_${tokenAccountKey.substring(0, 8)}`,
+                timestamp: new Date().toISOString(),
+                txTime: Date.now(),
+                solAmount: 0.1,
+                tokenAmount: tokenAmount,
+                isMillionTokenHolder: isHolderStillQualified(owner),
+                holderTokens: majorHolders.has(owner) ? majorHolders.get(owner).tokens : tokenAmount
+            };
+        }
+    } catch (e) {
+        logToConsole(`Error processing account ${tokenAccountKey}: ${e.message}`, 'warning');
+    }
+    return null;
 }
 
 async function analyzeTokenPurchase(tx, signature) {
@@ -1157,6 +1198,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
