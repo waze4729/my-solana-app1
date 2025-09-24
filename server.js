@@ -1121,37 +1121,39 @@ async function initialize() {
     }
 }
 
+let tick = 0;
 async function mainLoop() {
     await initialize();
-    let holderCheckCounter = 0;
     while (true) {
         try {
-            if (holderCheckCounter % 5 === 0) {
+            tick++;
+
+            // Fetch major holders every 10 cycles (~23 seconds if POLL_INTERVAL_MS = 2369)
+            if (tick % 10 === 0) {
                 await fetchMajorHolders();
-                const newlyAssigned = assignFreeGreenBlocks();
-                const invalidated = validateGuaranteedBlocks();
-                if (newlyAssigned > 0 || invalidated > 0) {
-                    broadcastUpdate();
-                }
-                holderCheckCounter = 0;
+                assignFreeGreenBlocks();
+                validateGuaranteedBlocks();
             }
-            if (holderCheckCounter % 2 === 0) {
-                await fetchTokenPrice();
-            }
+
+            // NO price fetch here
+
+            // Always check for new token transactions (buys) every loop
             const newPurchase = await monitorNewTokenTransactions();
             if (newPurchase) {
                 for (const purchase of newPurchase) {
                     processGameBlock(purchase);
                 }
             }
-            holderCheckCounter++;
+
         } catch (e) {
+            // Silent error handling
         }
+
         await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
     }
 }
-
 mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
