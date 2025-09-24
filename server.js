@@ -446,36 +446,41 @@ async function getTransactionDetails(signature) {
     } catch (e) {
         return null;
     }
-}
-
-function calculateSolSpent(tx) {
+}function calculateSolSpent(tx) {
     try {
         if (!tx?.meta || !tx.transaction) return { solSpent: 0, buyer: null };
         
         const meta = tx.meta;
-        const accountKeys = tx.transaction.message.accountKeys || [];
+        const accountKeys = tx.transaction.message.staticAccountKeys || 
+                           tx.transaction.message.accountKeys || [];
         
         let solSpent = 0;
         let buyer = null;
         
+        // Look for significant SOL decreases (more than just fee)
         for (let i = 0; i < accountKeys.length; i++) {
-            if (meta.preBalances?.[i] && meta.postBalances?.[i]) {
+            if (meta.preBalances?.[i] !== undefined && meta.postBalances?.[i] !== undefined) {
                 const balanceChange = (meta.postBalances[i] - meta.preBalances[i]) / LAMPORTS_PER_SOL;
                 
-                if (balanceChange < -0.001) {
+                // Significant SOL spent (more than 0.05 SOL)
+                if (balanceChange < -0.05) {
                     solSpent = Math.abs(balanceChange);
-                    buyer = accountKeys[i]?.pubkey?.toString() || buyer;
+                    buyer = accountKeys[i]?.toString() || buyer;
                     break;
                 }
             }
         }
         
+        // If no significant change found, use fee as minimum
         if (solSpent === 0 && meta.fee) {
             solSpent = meta.fee / LAMPORTS_PER_SOL;
-            buyer = accountKeys[0]?.pubkey?.toString() || null;
+            buyer = accountKeys[0]?.toString() || null;
         }
         
-        return { solSpent: Math.max(solSpent, 0.0001), buyer };
+        return { 
+            solSpent: Math.max(solSpent, 0.0001), 
+            buyer 
+        };
     } catch (e) {
         return { solSpent: 0.0001, buyer: null };
     }
@@ -544,9 +549,35 @@ async function processAccountBatch(tokenAccountPubkey, tokenAmount, tokenAccount
     }
     return null;
 }
-
 async function analyzeTokenPurchase(tx, signature) {
-    return null;
+    try {
+        if (!tx?.transaction || !tx.meta) return null;
+
+        const { solSpent, buyer } = calculateSolSpent(tx);
+        
+        // Only consider purchases of 0.1 SOL or more (block purchases)
+        if (solSpent < 0.09 || !buyer) return null;
+
+        // Check if buyer is a major holder
+        const isMillionTokenHolder = majorHolders.has(buyer) && 
+                                   majorHolders.get(buyer).tokens >= MIN_TOKENS_FOR_GUARANTEED_GREEN;
+
+        logToConsole(`🛒 Purchase detected: ${buyer.substring(0, 8)}... spent ${solSpent.toFixed(4)} SOL`, 'success');
+
+        return {
+            wallet: buyer,
+            signature: signature,
+            timestamp: new Date().toISOString(),
+            txTime: Date.now(),
+            solAmount: solSpent,
+            isMillionTokenHolder: isMillionTokenHolder,
+            holderTokens: isMillionTokenHolder ? majorHolders.get(buyer).tokens : 0
+        };
+
+    } catch (e) {
+        logToConsole(`Error analyzing purchase: ${e.message}`, 'warning');
+        return null;
+    }
 }
 
 function processGameBlock(purchase) {
@@ -1345,6 +1376,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
