@@ -911,9 +911,9 @@ app.get("/", (req, res) => {
 
         
         <div class="progress-section">
-            <div class="progress-title">CURRENT ROUND BLOCKS PROGRESS</div>
+            <div class="progress-title">CURRENT ROUND BLOCKS PROGRESS  <div class="progress-text" id="progress-text">0/100 Blocks (0%)</div></div>
             <div class="progress-bar">
-                <div class="progress-fill" id="progress-fill">            <div class="progress-text" id="progress-text">0/100 Blocks (0%)</div></div>
+                <div class="progress-fill" id="progress-fill">           </div>
             </div>
 
             <div class="progress-details" id="progress-details">Loading progress details...</div><CENTER>
@@ -1206,6 +1206,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
