@@ -591,10 +591,10 @@ app.get("/", (req, res) => {
             overflow: hidden;
         }
         .progress-fill {
-            height: 100%;
+            height: 66%;
             background: linear-gradient(90deg, #00ff41, #00ffff);
             width: 0%;
-            transition: width 1.369s ease;
+            transition: width 0.369s ease;
             position: relative;
         }
         .progress-fill::after {
@@ -607,15 +607,12 @@ app.get("/", (req, res) => {
             background: linear-gradient(90deg, transparent, #ffff00, transparent);
             animation: shimmer 2s infinite;
         }
-        @keyframes shimmer {
-            0% { transform: translateX(-100%); }
-            36.9% { transform: translateX(100%); }
-        }
+
         .progress-text {
             text-align: center;
             font-weight: 700;
             color: #00ffff;
-            font-size: 17px;
+            font-size: 27px;
         }
         .progress-details {
             text-align: center;
@@ -922,25 +919,7 @@ app.get("/", (req, res) => {
                 • HOLDER blocks turn RED if holder drops below 1M tokens<br>
                 • Every green block = 1% Reward from Creator Fees</CENTER>
         </div>
-        
-        <div class="minesweeper-grid" id="minesweeper-grid"></div>
-        
-        <div class="holders-section" id="holders-section" style="display: none;">
-            <div class="holders-title">🏦 1% HOLDERS BLOCKS 🏦</div>
-            <div class="holders-list" id="holders-list"></div>
-        </div>
-        
-        <div class="winners-section" id="winners-section" style="display: none;">
-            <div class="winners-title">🏆 CURRENT ROUND BUYERS 🏆</div>
-            <div class="winner-list" id="winner-list"></div>
-        </div>
-        
-        <div class="previous-winners-section" id="previous-winners-section" style="display: none;">
-            <div class="previous-winners-title">📋 PREVIOUS ROUND WINNERS 📋</div>
-            <div class="winner-list" id="previous-winner-list"></div>
-        </div>
-        
-        <div class="stats-section">
+                <div class="stats-section">
             <div class="stat-card">
                 <div class="stat-label">TOTAL VOLUME</div>
                 <div class="stat-value" id="total-volume">0.00 SOL</div>
@@ -958,6 +937,24 @@ app.get("/", (req, res) => {
                 <div class="stat-value" id="total-occupied">0</div>
             </div>
         </div>
+        <div class="minesweeper-grid" id="minesweeper-grid"></div>
+        
+        <div class="holders-section" id="holders-section" style="display: none;">
+            <div class="holders-title">🏦 1% HOLDERS BLOCKS 🏦</div>
+            <div class="holders-list" id="holders-list"></div>
+        </div>
+        
+        <div class="winners-section" id="winners-section" style="display: none;">
+            <div class="winners-title">🏆 CURRENT ROUND BUYERS 🏆</div>
+            <div class="winner-list" id="winner-list"></div>
+        </div>
+        
+        <div class="previous-winners-section" id="previous-winners-section" style="display: none;">
+            <div class="previous-winners-title">📋 PREVIOUS ROUND WINNERS 📋</div>
+            <div class="winner-list" id="previous-winner-list"></div>
+        </div>
+        
+
         
         <div class="console-section" id="console-output">
             <div class="console-line console-info">Initializing Game System...</div>
@@ -1206,6 +1203,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
