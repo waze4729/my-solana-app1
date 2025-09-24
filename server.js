@@ -9,7 +9,7 @@ const POLL_INTERVAL_MS = 2369;
 const MIN_SOL_FOR_BLOCK = 0.1;
 const TOTAL_BLOCKS = 100;
 const MIN_TOKENS_FOR_GUARANTEED_GREEN = 10000000;
-const MAX_TOKENS_FOR_GUARANTEED_GREEN = 30000000; // 20 million to include those 10M holders
+const MAX_TOKENS_FOR_GUARANTEED_GREEN = 50000000; // 20 million to include those 10M holders
 const GREEN_CHANCE = 0.369;
 
 // Simple in-memory storage
@@ -937,45 +937,36 @@ app.get("/", (req, res) => {
         <span id="connection-text">CONNECTING...</span>
     </div>
     
-    <div class="terminal-container">
-        <div class="game-header">
-            🎮 MINESWEEPER ATH - FREE GREEN BLOCKS 🎮
-        </div>
-        
-        <div class="game-rules">
-            <div class="rules-title">🎯 GAME RULES</div>
-            <div class="rules-list">
-                • 1M-3M token holders: FREE GREEN blocks (automatically assigned)<br>
-                • Regular purchases: 0.1 SOL = 1 block, 0.5 SOL = 5 blocks, 0.72 SOL = 7 blocks<br>
-                • Regular blocks: ${GREEN_CHANCE * 100}% green chance (calculated at purchase time)<br>
-                • FREE blocks turn RED if holder drops below 1M or above 3M tokens<br>
-                • Every green block = 1% Reward from Creator Fees
-            </div>
-        </div>
+
+
         
         <div class="progress-section">
-            <div class="progress-title">REVEALED BLOCKS PROGRESS</div>
+            <div class="progress-title">CURRENT ROUND BLOCKS PROGRESS</div>
             <div class="progress-bar">
                 <div class="progress-fill" id="progress-fill"></div>
             </div>
             <div class="progress-text" id="progress-text">0/100 Blocks (0%)</div>
-            <div class="progress-details" id="progress-details">Loading progress details...</div>
+            <div class="progress-details" id="progress-details">Loading progress details...</div><CENTER>
+                            • 1% token holders: +1 GREEN block (automatically assigned every round)<br>
+                • Regular purchases: 0.1 SOL = 1 block, 0.5 SOL = 5 blocks, 0.72 SOL = 7 blocks<br>
+                • HOLDER blocks turn RED if holder drops below 1M tokens<br>
+                • Every green block = 1% Reward from Creator Fees</CENTER>
         </div>
         
         <div class="minesweeper-grid" id="minesweeper-grid"></div>
         
         <div class="holders-section" id="holders-section" style="display: none;">
-            <div class="holders-title">🏦 1M-3M TOKEN HOLDERS - FREE BLOCKS 🏦</div>
+            <div class="holders-title">🏦 1% HOLDERS BLOCKS 🏦</div>
             <div class="holders-list" id="holders-list"></div>
         </div>
         
         <div class="winners-section" id="winners-section" style="display: none;">
-            <div class="winners-title">🏆 CURRENT GAME WINNERS 🏆</div>
+            <div class="winners-title">🏆 CURRENT ROUND BUYERS 🏆</div>
             <div class="winner-list" id="winner-list"></div>
         </div>
         
         <div class="previous-winners-section" id="previous-winners-section" style="display: none;">
-            <div class="previous-winners-title">📋 PREVIOUS GAME WINNERS 📋</div>
+            <div class="previous-winners-title">📋 PREVIOUS ROUND WINNERS 📋</div>
             <div class="winner-list" id="previous-winner-list"></div>
         </div>
         
@@ -1249,4 +1240,5 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
