@@ -359,7 +359,6 @@ function calculateSolSpent(tx) {
     }
 }
 
-// NEW WAY TO FETCH BUYS: use getSignaturesForAddress for the largest token accounts
 async function monitorNewTokenTransactions() {
     try {
         const mintPublicKey = new PublicKey(TOKEN_MINT);
@@ -1159,5 +1158,6 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
