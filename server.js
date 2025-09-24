@@ -804,8 +804,8 @@ app.get("/", (req, res) => {
             font-weight: bold;
         }
         .block-number {
-            font-size: 12px;
-            opacity: 0.7;
+            font-size: 47px;
+            opacity: 0.769;
             font-weight: bold;
         }
         .block-wallet {
@@ -1154,7 +1154,7 @@ document.getElementById('total-volume').textContent = stats.creatorFees.toFixed(
                     if (block.isGuaranteedGreen) blockClass += ' guaranteed';
                     
                     let blockContent = \`
-                        <span class="block-number">\${index + 1}</span>
+                        <span class="block-number">\${index + 1}</span><BR><BR>
                         \${block.color === 'green' ? '💸 ' : '🍌'}
                     \`;
                     
@@ -1357,6 +1357,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
