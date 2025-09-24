@@ -568,7 +568,7 @@ app.get("/", (req, res) => {
             font-weight: 700;
             text-shadow: 0 0 10px #ffff0080;
         }
-        .progress-section {
+      .progress-section {
             margin: 20px 0;
             padding: 20px;
             border: 2px solid #00ffff;
@@ -591,10 +591,10 @@ app.get("/", (req, res) => {
             overflow: hidden;
         }
         .progress-fill {
-            height: 66%;
+            height: 100%;
             background: linear-gradient(90deg, #00ff41, #00ffff);
             width: 0%;
-            transition: width 0.369s ease;
+            transition: width 0.5s ease;
             position: relative;
         }
         .progress-fill::after {
@@ -603,16 +603,19 @@ app.get("/", (req, res) => {
             top: 0;
             right: 0;
             bottom: 0;
-            width: 1.369%;
+            width: 20%;
             background: linear-gradient(90deg, transparent, #ffff00, transparent);
             animation: shimmer 2s infinite;
         }
-
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
         .progress-text {
             text-align: center;
             font-weight: 700;
             color: #00ffff;
-            font-size: 27px;
+            font-size: 14px;
         }
         .progress-details {
             text-align: center;
@@ -1203,6 +1206,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
