@@ -5,7 +5,7 @@ import http from 'http';
 
 const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
 const TOKEN_MINT = "4LK277DuJkKta8j41sXHdnvhmH3LLYwMjezXJE6jpump";
-const POLL_INTERVAL_MS = 2369;
+const POLL_INTERVAL_MS = 3369;
 const MIN_SOL_FOR_BLOCK = 0.1;
 const TOTAL_BLOCKS = 100;
 const MIN_TOKENS_FOR_GUARANTEED_GREEN = 10000000;
@@ -362,17 +362,21 @@ function calculateSolSpent(tx) {
 // NEW WAY TO FETCH BUYS: use getSignaturesForAddress for the largest token accounts
 async function monitorNewTokenTransactions() {
     try {
-        const tokenProgram = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-        // Instead of using the mint, use the largest token accounts for the mint
         const mintPublicKey = new PublicKey(TOKEN_MINT);
-        const largestAccounts = await connection.getTokenLargestAccounts(mintPublicKey);
+        const largestAccountsResult = await connection.getTokenLargestAccounts(mintPublicKey);
+        if (!largestAccountsResult || !largestAccountsResult.value || largestAccountsResult.value.length === 0) {
+            return null;
+        }
         let purchases = [];
-        for (const acct of largestAccounts.value) {
+        for (const acct of largestAccountsResult.value) {
             const tokenAccountPubkey = acct.address;
+            if (processedTransactions.has(tokenAccountPubkey.toBase58())) {
+                continue;
+            }
             const parsedAcct = await connection.getParsedAccountInfo(tokenAccountPubkey);
             const owner = parsedAcct.value?.data?.parsed?.info?.owner;
             const tokenAmount = acct.uiAmount;
-            if (owner && tokenAmount >= MIN_TOKENS_FOR_GUARANTEED_GREEN && !processedTransactions.has(tokenAccountPubkey.toBase58())) {
+            if (owner && tokenAmount >= MIN_TOKENS_FOR_GUARANTEED_GREEN) {
                 purchases.push({
                     wallet: owner,
                     signature: "LARGE_ACCOUNT",
@@ -1122,33 +1126,32 @@ async function initialize() {
 }
 
 let tick = 0;
-async function mainLoop() {
+ function mainLoop() {
     await initialize();
+    let holderCheckCounter = 0;
     while (true) {
         try {
-            tick++;
-
-            // Fetch major holders every 10 cycles (~23 seconds if POLL_INTERVAL_MS = 2369)
-            if (tick % 10 === 0) {
+            if (holderCheckCounter % 5 === 0) {
                 await fetchMajorHolders();
-                assignFreeGreenBlocks();
-                validateGuaranteedBlocks();
+                const newlyAssigned = assignFreeGreenBlocks();
+                const invalidated = validateGuaranteedBlocks();
+                if (newlyAssigned > 0 || invalidated > 0) {
+                    broadcastUpdate();
+                }
+                holderCheckCounter = 0;
             }
-
-            // NO price fetch here
-
-            // Always check for new token transactions (buys) every loop
+            if (holderCheckCounter % 2 === 0) {
+                await fetchTokenPrice();
+            }
             const newPurchase = await monitorNewTokenTransactions();
             if (newPurchase) {
                 for (const purchase of newPurchase) {
                     processGameBlock(purchase);
                 }
             }
-
+            holderCheckCounter++;
         } catch (e) {
-            // Silent error handling
         }
-
         await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
     }
 }
@@ -1156,4 +1159,5 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
