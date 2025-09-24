@@ -358,7 +358,6 @@ function calculateSolSpent(tx) {
         return { solSpent: 0.0001, buyer: null };
     }
 }
-
 async function monitorNewTokenTransactions() {
     try {
         const mintPublicKey = new PublicKey(TOKEN_MINT);
@@ -1158,6 +1157,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
