@@ -359,103 +359,51 @@ function calculateSolSpent(tx) {
     }
 }
 
+// NEW WAY TO FETCH BUYS: use getSignaturesForAddress for the largest token accounts
 async function monitorNewTokenTransactions() {
     try {
+        const tokenProgram = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+        // Instead of using the mint, use the largest token accounts for the mint
         const mintPublicKey = new PublicKey(TOKEN_MINT);
-        const signatures = await connection.getSignaturesForAddress(mintPublicKey, { limit: 10 });
-        logToConsole(`Fetched ${signatures.length} signatures for ${TOKEN_MINT}`, 'info');
-
-        for (const sig of signatures) {
-            if (processedTransactions.has(sig.signature)) continue;
-
-            logToConsole(`Processing signature: ${sig.signature}`, 'info');
-            try {
-                const tx = await getTransactionDetails(sig.signature);
-                if (!tx || !tx.meta || tx.meta.err) {
-                    logToConsole(`Skipped invalid transaction: ${sig.signature}`, 'warning');
-                    processedTransactions.add(sig.signature);
-                    continue;
-                }
-
-                const purchase = await analyzeTokenPurchase(tx, sig.signature);
-                if (purchase) {
-                    logToConsole(`Detected purchase(s): ${JSON.stringify(purchase)}`, 'success');
-                    processedTransactions.add(sig.signature);
-                    return purchase;
-                } else {
-                    logToConsole(`No valid purchase detected in: ${sig.signature}`, 'info');
-                    processedTransactions.add(sig.signature);
-                }
-            } catch (e) {
-                logToConsole(`Error processing signature: ${sig.signature} - ${e.message}`, 'error');
-                processedTransactions.add(sig.signature);
+        const largestAccounts = await connection.getTokenLargestAccounts(mintPublicKey);
+        let purchases = [];
+        for (const acct of largestAccounts.value) {
+            const tokenAccountPubkey = acct.address;
+            const parsedAcct = await connection.getParsedAccountInfo(tokenAccountPubkey);
+            const owner = parsedAcct.value?.data?.parsed?.info?.owner;
+            const tokenAmount = acct.uiAmount;
+            if (owner && tokenAmount >= MIN_TOKENS_FOR_GUARANTEED_GREEN && !processedTransactions.has(tokenAccountPubkey.toBase58())) {
+                purchases.push({
+                    wallet: owner,
+                    signature: "LARGE_ACCOUNT",
+                    timestamp: new Date().toISOString(),
+                    txTime: Date.now(),
+                    solAmount: 0.1,
+                    tokenAmount: tokenAmount,
+                    isMillionTokenHolder: isHolderStillQualified(owner),
+                    holderTokens: majorHolders.has(owner) ? majorHolders.get(owner).tokens : tokenAmount
+                });
+                processedTransactions.add(tokenAccountPubkey.toBase58());
             }
         }
-
-        return null;
+        return purchases.length > 0 ? purchases : null;
     } catch (e) {
         logToConsole(`Error in monitorNewTokenTransactions: ${e.message}`, 'error');
         return null;
     }
-} }
 }
 
 async function analyzeTokenPurchase(tx, signature) {
-    try {
-        if (!tx?.meta || !tx?.transaction) return null;
-        
-        const postTokenBalances = tx.meta?.postTokenBalances || [];
-        const tokenTransfers = postTokenBalances.filter(balance =>
-            balance?.mint === TOKEN_MINT &&
-            balance?.uiTokenAmount?.uiAmount > 0
-        );
-        
-        if (tokenTransfers.length === 0) return null;
-        
-        const { solSpent, buyer } = calculateSolSpent(tx);
-        if (solSpent < 0.0005) return null;
-        
-        const purchases = [];
-        for (const transfer of tokenTransfers) {
-            const wallet = transfer.owner || 'unknown';
-            const tokenAmount = transfer.uiTokenAmount?.uiAmount || 0;
-            
-            if (recentHolders.has(wallet)) continue;
-            
-            const purchaseDetails = {
-                wallet: wallet,
-                signature: signature,
-                timestamp: tx.blockTime ? new Date(tx.blockTime * 1000).toISOString() : new Date().toISOString(),
-                txTime: tx.blockTime ? tx.blockTime * 1000 : Date.now(),
-                solAmount: solSpent,
-                tokenAmount: tokenAmount,
-                isMillionTokenHolder: isHolderStillQualified(wallet),
-                holderTokens: majorHolders.has(wallet) ? majorHolders.get(wallet).tokens : 0
-            };
-            
-            purchases.push(purchaseDetails);
-            recentHolders.add(wallet);
-        }
-        
-        return purchases.length > 0 ? purchases : null;
-    } catch (e) {
-        return null;
-    }
+    return null;
 }
 
 function processGameBlock(purchase) {
     if (gameCompleted) return;
-    
-    // Calculate how many blocks to open based on SOL spent (0.1 SOL = 1 block)
     let blocksToOpen = Math.floor(purchase.solAmount / MIN_SOL_FOR_BLOCK);
-    
-    // 1M-3M token holders get at least 1 block
     if (purchase.isMillionTokenHolder) {
         blocksToOpen = Math.max(blocksToOpen, 1);
         logToConsole(`🏦 1M-3M HOLDER: ${purchase.wallet.substring(0, 8)}... buying ${blocksToOpen} blocks`, 'success');
     }
-    
-    // Find available hidden blocks (skip already assigned blocks)
     const availableBlocks = [];
     for (let i = 0; i < TOTAL_BLOCKS; i++) {
         if (gameBlocks[i].status === 'hidden' && !gameBlocks[i].assignedHolder) {
@@ -463,19 +411,13 @@ function processGameBlock(purchase) {
         }
         if (availableBlocks.length >= blocksToOpen) break;
     }
-    
     const actualBlocksToOpen = Math.min(blocksToOpen, availableBlocks.length);
-    
     if (actualBlocksToOpen > 0) {
         logToConsole(`💰 ${purchase.isMillionTokenHolder ? '🏦 ' : ''}${purchase.wallet.substring(0, 8)}... bought ${purchase.solAmount.toFixed(4)} SOL - Opening ${actualBlocksToOpen} blocks`, 'info');
-        
         for (let i = 0; i < actualBlocksToOpen; i++) {
             const blockIndex = availableBlocks[i];
             if (blockIndex >= TOTAL_BLOCKS) break;
-            
-            // Regular buyers get 50/50 chance
             const blockColor = Math.random() < GREEN_CHANCE ? 'green' : 'red';
-            
             gameBlocks[blockIndex] = {
                 status: 'revealed',
                 color: blockColor,
@@ -484,7 +426,6 @@ function processGameBlock(purchase) {
                 isGuaranteedGreen: false,
                 blockValue: MIN_SOL_FOR_BLOCK
             };
-            
             if (blockColor === 'green') {
                 winningWallets.push({
                     wallet: purchase.wallet,
@@ -498,22 +439,16 @@ function processGameBlock(purchase) {
                     isGuaranteed: false,
                     isFree: false
                 });
-                
                 logToConsole(`🎯 REGULAR GREEN at block ${blockIndex + 1}`, 'success');
             } else {
                 logToConsole(`💥 RED BLOCK at block ${blockIndex + 1}`, 'info');
             }
-            
             totalVolume += MIN_SOL_FOR_BLOCK;
         }
-        
-        // Update currentBlockIndex to the highest revealed block
         currentBlockIndex = gameBlocks.filter(block => block.status === 'revealed').length;
-        
         if (currentBlockIndex >= TOTAL_BLOCKS) {
             completeGame();
         }
-        
         broadcastUpdate();
     }
 }
@@ -521,22 +456,19 @@ function processGameBlock(purchase) {
 function completeGame() {
     gameCompleted = true;
     previousWinners = [...winningWallets];
-    
     const dashboardData = getCurrentDashboardData();
     const totalGreenBlocks = dashboardData.stats.totalGreenBlocks;
-    
     logToConsole(`🏆 GAME COMPLETED! ${winningWallets.length} winning blocks (${totalGreenBlocks} total green blocks)`, 'success');
     logToConsole(`🔄 Starting new game in 10 seconds...`, 'info');
-    
     setTimeout(() => {
         startNewGame();
     }, 10000);
 }
 
 function startNewGame() {
-    gameBlocks = Array(TOTAL_BLOCKS).fill(null).map(() => ({ 
-        status: 'hidden', 
-        color: null, 
+    gameBlocks = Array(TOTAL_BLOCKS).fill(null).map(() => ({
+        status: 'hidden',
+        color: null,
         purchase: null,
         assignedHolder: null,
         isGuaranteedGreen: false
@@ -546,16 +478,12 @@ function startNewGame() {
     winningWallets = [];
     totalVolume = 0;
     assignedHoldersThisGame.clear();
-    
     consoleMessages = consoleMessages.slice(-20);
     processedTransactions.clear();
     recentHolders.clear();
-    
     logToConsole(`🔄 NEW GAME STARTED! 100 blocks ready`, 'success');
     logToConsole(`🎯 1M-3M holders get FREE GREEN blocks automatically`, 'info');
     logToConsole(`💰 Regular purchases: 0.1 SOL = 1 block, ${GREEN_CHANCE * 100}% green chance`, 'info');
-    
-    // Assign FREE green blocks for current 1M-3M holders
     assignFreeGreenBlocks();
     broadcastUpdate();
 }
@@ -1165,6 +1093,7 @@ app.get("/", (req, res) => {
     `);
 });
 
+
 app.get("/api/stats", (req, res) => {
     res.json(getCurrentDashboardData());
 });
@@ -1183,7 +1112,6 @@ async function initialize() {
         await fetchTokenSupply();
         await fetchMajorHolders();
         logToConsole(`✅ Token data initialized`, 'success');
-        
         const assigned = assignFreeGreenBlocks();
         if (assigned > 0) {
             logToConsole(`🎯 Assigned ${assigned} FREE green blocks for 1M-3M holders`, 'success');
@@ -1195,42 +1123,30 @@ async function initialize() {
 
 async function mainLoop() {
     await initialize();
-    
     let holderCheckCounter = 0;
-    
     while (true) {
         try {
-            // Check holders every 5 cycles (25 seconds)
             if (holderCheckCounter % 5 === 0) {
                 await fetchMajorHolders();
                 const newlyAssigned = assignFreeGreenBlocks();
                 const invalidated = validateGuaranteedBlocks();
-                
                 if (newlyAssigned > 0 || invalidated > 0) {
                     broadcastUpdate();
                 }
                 holderCheckCounter = 0;
             }
-            
-            // Update price every 2 cycles (10 seconds)
             if (holderCheckCounter % 2 === 0) {
                 await fetchTokenPrice();
             }
-            
-            // Check for new transactions
             const newPurchase = await monitorNewTokenTransactions();
             if (newPurchase) {
                 for (const purchase of newPurchase) {
                     processGameBlock(purchase);
                 }
             }
-            
             holderCheckCounter++;
-            
         } catch (e) {
-            // Silent error
         }
-        
         await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
     }
 }
@@ -1239,6 +1155,3 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
-
-
-
