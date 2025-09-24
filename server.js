@@ -739,15 +739,13 @@ app.get("/", (req, res) => {
             font-weight: bold;
         }
         .block-free {
-            font-size: 10px;
+            font-size: 11px;
             position: absolute;
-            bottom: 12px;
-            left: 2px;
+            top: 2px;
             right: 2px;
-            text-align: center;
-            background: rgba(0, 255, 0, 0.9);
-            color: #000;
-            padding: 2px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 2px 4px;
+            border-radius: 3px;
             font-weight: bold;
         }
         .winners-section {
@@ -1256,5 +1254,6 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
