@@ -362,43 +362,42 @@ function calculateSolSpent(tx) {
 async function monitorNewTokenTransactions() {
     try {
         const mintPublicKey = new PublicKey(TOKEN_MINT);
-        const signatures = await connection.getSignaturesForAddress(mintPublicKey, { limit: 5 });
-        
+        const signatures = await connection.getSignaturesForAddress(mintPublicKey, { limit: 10 });
+        logToConsole(`Fetched ${signatures.length} signatures for ${TOKEN_MINT}`, 'info');
+
         for (const sig of signatures) {
             if (processedTransactions.has(sig.signature)) continue;
-            
+
+            logToConsole(`Processing signature: ${sig.signature}`, 'info');
             try {
                 const tx = await getTransactionDetails(sig.signature);
                 if (!tx || !tx.meta || tx.meta.err) {
+                    logToConsole(`Skipped invalid transaction: ${sig.signature}`, 'warning');
                     processedTransactions.add(sig.signature);
                     continue;
                 }
-                
-                const txTime = tx.blockTime ? tx.blockTime * 1000 : 0;
-                const threeMinutesAgo = Date.now() - 3 * 60 * 1000;
-                
-                if (txTime < threeMinutesAgo) {
-                    processedTransactions.add(sig.signature);
-                    continue;
-                }
-                
+
                 const purchase = await analyzeTokenPurchase(tx, sig.signature);
                 if (purchase) {
+                    logToConsole(`Detected purchase(s): ${JSON.stringify(purchase)}`, 'success');
                     processedTransactions.add(sig.signature);
                     return purchase;
                 } else {
+                    logToConsole(`No valid purchase detected in: ${sig.signature}`, 'info');
                     processedTransactions.add(sig.signature);
                 }
-                
             } catch (e) {
+                logToConsole(`Error processing signature: ${sig.signature} - ${e.message}`, 'error');
                 processedTransactions.add(sig.signature);
             }
         }
-        
+
         return null;
     } catch (e) {
+        logToConsole(`Error in monitorNewTokenTransactions: ${e.message}`, 'error');
         return null;
     }
+} }
 }
 
 async function analyzeTokenPurchase(tx, signature) {
@@ -1240,5 +1239,6 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
