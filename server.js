@@ -16,11 +16,11 @@ function getRandomRpcEndpoint() {
 // Usage: Get a random RPC endpoint each time it's needed
 const RPC_ENDPOINT = getRandomRpcEndpoint();
 const TOKEN_MINT = "4xVsawMYeSK7dPo9acp62bDFaDmrsCrSVXmEEBZrpump";
-const POLL_INTERVAL_MS = 3369;
+const POLL_INTERVAL_MS = 2500;
 const MIN_SOL_FOR_BLOCK = 0.1;
 const TOTAL_BLOCKS = 100;
 const MIN_TOKENS_FOR_GUARANTEED_GREEN = 10000000;
-const MAX_TOKENS_FOR_GUARANTEED_GREEN = 50000000; // 20 million to include those 10M holders
+const MAX_TOKENS_FOR_GUARANTEED_GREEN = 31000000; // 20 million to include those 10M holders
 const GREEN_CHANCE = 0.369;
 const creatorConnection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
 const sdk = new OnlinePumpSdk(creatorConnection);
@@ -158,15 +158,33 @@ async function distributeFees() {
         logToConsole(`❌ Distribution failed: ${error.message}`, 'error');
     }
 }
+let cachedFees = 0;
+let lastFeesFetchTime = 0;
+const CACHE_DURATION = 30000; // 30 seconds
+
 async function fetchCreatorFees() {
+    const now = Date.now();
+    
+    // Return cached value if within 30 seconds
+    if (now - lastFeesFetchTime < CACHE_DURATION) {
+        return cachedFees;
+    }
+    
     try {
         const balanceLamports = await sdk.getCreatorVaultBalanceBothPrograms(wallet.publicKey);
         const balanceSol = Number(balanceLamports) / LAMPORTS_PER_SOL;
+        
+        // Update cache
+        cachedFees = balanceSol;
+        lastFeesFetchTime = now;
         creatorFees = balanceSol;
+        
         return balanceSol;
     } catch (err) {
         console.error("Error fetching creator fees:", err);
-        return 0;
+        
+        // Return cached value even if it's old when error occurs
+        return cachedFees;
     }
 }
 function getCurrentDashboardData() {
@@ -1348,4 +1366,5 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
