@@ -594,7 +594,7 @@ app.get("/", (req, res) => {
             height: 100%;
             background: linear-gradient(90deg, #00ff41, #00ffff);
             width: 0%;
-            transition: width 0.5s ease;
+            transition: width 1.369s ease;
             position: relative;
         }
         .progress-fill::after {
@@ -603,19 +603,19 @@ app.get("/", (req, res) => {
             top: 0;
             right: 0;
             bottom: 0;
-            width: 20%;
+            width: 1.369%;
             background: linear-gradient(90deg, transparent, #ffff00, transparent);
             animation: shimmer 2s infinite;
         }
         @keyframes shimmer {
             0% { transform: translateX(-100%); }
-            100% { transform: translateX(100%); }
+            36.9% { transform: translateX(100%); }
         }
         .progress-text {
             text-align: center;
             font-weight: 700;
             color: #00ffff;
-            font-size: 14px;
+            font-size: 17px;
         }
         .progress-details {
             text-align: center;
@@ -913,9 +913,9 @@ app.get("/", (req, res) => {
         <div class="progress-section">
             <div class="progress-title">CURRENT ROUND BLOCKS PROGRESS</div>
             <div class="progress-bar">
-                <div class="progress-fill" id="progress-fill"></div>
+                <div class="progress-fill" id="progress-fill">            <div class="progress-text" id="progress-text">0/100 Blocks (0%)</div></div>
             </div>
-            <div class="progress-text" id="progress-text">0/100 Blocks (0%)</div>
+
             <div class="progress-details" id="progress-details">Loading progress details...</div><CENTER>
                             • 1% token holders: +1 GREEN block (automatically assigned every round)<br>
                 • Regular purchases: 0.1 SOL = 1 block, 0.5 SOL = 5 blocks, 0.72 SOL = 7 blocks<br>
@@ -1206,6 +1206,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
