@@ -686,366 +686,568 @@ app.get("/", (req, res) => {
     <title>BWANANA.FUN</title>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            background: #0a0a0a;
-            color: #00ff41;
-            font-family: 'JetBrains Mono', monospace;
-            min-height: 100vh;
-            overflow-x: auto;
-            font-size: 12px;
-            line-height: 1.4;
-        }
-        .terminal-container {
-            padding: 20px;
-            max-width: 1400px;
-            margin: 0 auto;
-            background: rgba(0, 0, 0, 0.9);
-            border: 2px solid #00ff41;
-            box-shadow: 0 0 20px #00ff4130;
-        }
-        .game-header {
-            text-align: center;
-            margin-bottom: 30px;
-            color: #ffff00;
-            font-size: 24px;
-            font-weight: 700;
-            text-shadow: 0 0 10px #ffff0080;
-        }
-      .progress-section {
-            margin: 20px 0;
-            padding: 20px;
-            border: 2px solid #00ffff;
-            background: rgba(0, 255, 255, 0.05);
-        }
-        .progress-title {
-            color: #00ffff;
-            font-weight: 700;
-            margin-bottom: 15px;
-            text-align: center;
-            font-size: 16px;
-        }
-        .progress-bar {
-            width: 100%;
-            height: 30px;
-            background: #000;
-            border: 2px solid #00ff41;
-            position: relative;
-            margin-bottom: 10px;
-            overflow: hidden;
-        }
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #00ff41, #00ffff);
-            width: 0%;
-            transition: width 0.5s ease;
-            position: relative;
-        }
-        .progress-fill::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            right: 0;
-            bottom: 0;
-            width: 20%;
-            background: linear-gradient(90deg, transparent, #ffff00, transparent);
-            animation: shimmer 2s infinite;
-        }
-        @keyframes shimmer {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(100%); }
-        }
-        .progress-text {
-            text-align: center;
-            font-weight: 700;
-            color: #00ffff;
-            font-size: 14px;
-        }
-        .progress-details {
-            text-align: center;
-            font-size: 12px;
-            color: #00ff41;
-            opacity: 0.8;
-            margin-top: 5px;
-        }
-        .minesweeper-grid {
-            display: grid;
-            grid-template-columns: repeat(10, 1fr);
-            gap: 8px;
-            margin: 20px 0;
-            padding: 20px;
-            border: 2px solid #ff00ff;
-            background: rgba(255, 0, 255, 0.05);
-        }
-        .block {
-            aspect-ratio: 1;
-            border: 2px solid #444;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            background: #1a1a1a;
-            position: relative;
-            overflow: hidden;
-            font-size: 14px;
-        }
-        .block.hidden {
-            background: #2a2a2a;
-            border-color: #666;
-        }
-        .block.revealed.green {
-            background: #00ff41;
-            color: #000;
-            border-color: #00cc33;
-            box-shadow: 0 0 15px #00ff41;
-            font-size: 16px;
-            font-weight: bold;
-        }
-        .block.revealed.red {
-            background: #ff4444;
-            color: #000;
-            border-color: #cc3333;
-            box-shadow: 0 0 15px #ff4444;
-            font-size: 16px;
-            font-weight: bold;
-        }
-        .block.revealed.green.guaranteed {
-            background: linear-gradient(45deg, #00ff41, #ffff00);
-            box-shadow: 0 0 20px #ffff00;
-            border-color: #ffff00;
-            font-size: 16px;
-            font-weight: bold;
-        }
-        .block-number {
-            font-size: 47px;
-            opacity: 0.769;
-            font-weight: bold;
-        }
-        .block-wallet {
-            font-size: 10px;
-            position: absolute;
-            bottom: 2px;
-            left: 2px;
-            right: 2px;
-            text-align: center;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 2px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            font-weight: bold;
-        }
-        .block-sol {
-            font-size: 11px;
-            position: absolute;
-            top: 2px;
-            right: 2px;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 2px 4px;
-            border-radius: 3px;
-            font-weight: bold;
-        }
-        .block-free {
-            font-size: 11px;
-            position: absolute;
-            top: 2px;
-            right: 2px;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 2px 4px;
-            border-radius: 3px;
-            font-weight: bold;
-        }
-        .winners-section {
-            margin: 20px 0;
-            padding: 20px;
-            border: 2px solid #ffff00;
-            background: rgba(255, 255, 0, 0.05);
-        }
-        .previous-winners-section {
-            margin: 20px 0;
-            padding: 20px;
-            border: 2px solid #00ffff;
-            background: rgba(0, 255, 255, 0.05);
-        }
-        .holders-section {
-            margin: 20px 0;
-            padding: 20px;
-            border: 2px solid #ff00ff;
-            background: rgba(255, 0, 255, 0.05);
-        }
-        .winners-title {
-            color: #ffff00;
-            font-weight: 700;
-            margin-bottom: 15px;
-            text-align: center;
-            font-size: 16px;
-        }
-        .previous-winners-title {
-            color: #00ffff;
-            font-weight: 700;
-            margin-bottom: 15px;
-            text-align: center;
-            font-size: 16px;
-        }
-        .holders-title {
-            color: #ff00ff;
-            font-weight: 700;
-            margin-bottom: 15px;
-            text-align: center;
-            font-size: 16px;
-        }
-        .winner-list, .holders-list {
-            max-height: 200px;
-            overflow-y: auto;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 10px;
-        }
-        .winner-item {
-            padding: 10px;
-            background: rgba(255, 255, 0, 0.1);
-            border-left: 3px solid #ffff00;
-            font-size: 11px;
-        }
-        .winner-item.million-holder {
-            background: rgba(255, 255, 0, 0.3);
-            border-left: 3px solid #ff00ff;
-        }
-        .winner-item.free {
-            background: rgba(0, 255, 0, 0.2);
-            border-left: 3px solid #00ff00;
-        }
-        .previous-winner-item {
-            padding: 8px;
-            background: rgba(0, 255, 255, 0.1);
-            border-left: 3px solid #00ffff;
-            font-size: 10px;
-            opacity: 0.8;
-        }
-        .holder-item {
-            padding: 10px;
-            background: rgba(255, 0, 255, 0.1);
-            border-left: 3px solid #ff00ff;
-            font-size: 11px;
-        }
-        .holder-item.assigned {
-            background: rgba(0, 255, 0, 0.2);
-            border-left: 3px solid #00ff00;
-        }
-        .holder-item.invalid {
-            background: rgba(255, 0, 0, 0.1);
-            border-left: 3px solid #ff0000;
-            opacity: 0.6;
-        }
-        .winner-wallet, .holder-wallet {
-            font-weight: 700;
-            margin-bottom: 5px;
-            word-break: break-all;
-            font-size: 12px;
-        }
-        .winner-wallet a, .holder-wallet a {
-            color: inherit;
-            text-decoration: none;
-        }
-        .winner-wallet a:hover, .holder-wallet a:hover {
-            text-decoration: underline;
-        }
-        .winner-details, .holder-details {
-            font-size: 10px;
-            color: #ccc;
-        }
-        .winner-details a, .holder-details a {
-            color: #00ff41;
-            text-decoration: none;
-            margin-right: 10px;
-        }
-        .winner-details a:hover, .holder-details a:hover {
-            text-decoration: underline;
-        }
-        .stats-section {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin: 20px 0;
-        }
-        .stat-card {
-            padding: 15px;
-            border: 1px solid #00ff41;
-            background: rgba(0, 255, 65, 0.05);
-            text-align: center;
-        }
-        .stat-value {
-            font-size: 18px;
-            font-weight: 700;
-            color: #ffff00;
-            margin: 5px 0;
-        }
-        .stat-label {
-            font-size: 11px;
-            color: #00ff41;
-            opacity: 0.8;
-        }
-        .console-section {
-            background: #000;
-            border: 2px solid #00ff41;
-            height: 200px;
-            overflow-y: auto;
-            margin: 20px 0;
-            padding: 10px;
-            font-size: 10px;
-        }
-        .console-line {
-            margin: 2px 0;
-            word-break: break-all;
-        }
-        .console-info { color: #00ff41; }
-        .console-success { color: #ffff00; }
-        .console-error { color: #ff4444; }
-        .console-warning { color: #ffaa00; }
-        .connection-status {
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            padding: 5px 10px;
-            background: #000;
-            border: 1px solid #00ff41;
-            font-size: 10px;
-        }
-        .status-connected { color: #00ff41; }
-        .status-disconnected { color: #ff4444; }
-        .game-rules {
-            margin: 20px 0;
-            padding: 15px;
-            border: 2px solid #00ff41;
-            background: rgba(0, 255, 65, 0.05);
-        }
-        .rules-title {
-            color: #00ff41;
-            font-weight: 700;
-            margin-bottom: 10px;
-            text-align: center;
-        }
-        .rules-list {
-            font-size: 11px;
-            line-height: 1.6;
-        }
-        @media (max-width: 768px) {
-            .minesweeper-grid {
-                grid-template-columns: repeat(5, 1fr);
-            }
-            .terminal-container {
-                padding: 10px;
-                margin: 5px;
-            }
-            .winner-list, .holders-list {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
+ <style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap');
+* { 
+    margin: 0; 
+    padding: 0; 
+    box-sizing: border-box; 
+}
+body {
+    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+    color: #00ff41;
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+    font-size: 13px;
+    line-height: 1.3;
+    background-attachment: fixed;
+}
+.terminal-container {
+    padding: 15px;
+    max-width: 1400px;
+    margin: 0 auto;
+    background: rgba(0, 0, 0, 0.85);
+    border: 1px solid #00ff41;
+    box-shadow: 
+        0 0 30px #00ff4120,
+        inset 0 0 20px #00ff4108;
+    backdrop-filter: blur(10px);
+}
+.game-header {
+    text-align: center;
+    margin-bottom: 20px;
+    color: #ffff00;
+    font-size: 28px;
+    font-weight: 800;
+    text-shadow: 
+        0 0 15px #ffff00,
+        0 0 30px #ffff0040;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+.progress-section {
+    margin: 15px 0;
+    padding: 15px;
+    border: 1px solid #00ffff;
+    background: rgba(0, 255, 255, 0.03);
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+}
+.progress-section::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, #00ffff10, transparent);
+    animation: scan 3s linear infinite;
+}
+@keyframes scan {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+.progress-title {
+    color: #00ffff;
+    font-weight: 700;
+    margin-bottom: 12px;
+    text-align: center;
+    font-size: 18px;
+    text-shadow: 0 0 10px #00ffff80;
+}
+.progress-bar {
+    width: 100%;
+    height: 25px;
+    background: #000;
+    border: 1px solid #00ff41;
+    position: relative;
+    margin-bottom: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+}
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #00ff41, #00ffff, #00ff41);
+    background-size: 200% 100%;
+    width: 0%;
+    transition: width 0.5s ease;
+    position: relative;
+    animation: gradientShift 2s ease infinite;
+}
+@keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+.progress-text {
+    text-align: center;
+    font-weight: 700;
+    color: #00ffff;
+    font-size: 14px;
+    margin-bottom: 5px;
+}
+.progress-details {
+    text-align: center;
+    font-size: 11px;
+    color: #00ff41;
+    opacity: 0.9;
+}
+
+/* 128x128px Blocks Grid */
+.minesweeper-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 128px); /* 5 columns of 128px */
+    grid-auto-rows: 128px; /* Each row 128px */
+    gap: 8px;
+    margin: 20px 0;
+    padding: 20px;
+    border: 1px solid #ff00ff;
+    background: rgba(255, 0, 255, 0.02);
+    border-radius: 8px;
+    justify-content: center;
+    max-width: fit-content;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.block {
+    width: 128px;
+    height: 128px;
+    border: 2px solid #333;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: linear-gradient(145deg, #1a1a1a, #2a2a2a);
+    position: relative;
+    overflow: hidden;
+    font-size: 12px;
+    border-radius: 6px;
+    box-shadow: 
+        inset 0 0 20px #00000080,
+        0 4px 8px #00000040;
+}
+
+.block.hidden {
+    background: linear-gradient(145deg, #2a2a2a, #3a3a3a);
+    border-color: #555;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.02); }
+}
+
+.block.revealed.green {
+    background: linear-gradient(145deg, #00ff41, #00cc33);
+    color: #000;
+    border-color: #00ff41;
+    box-shadow: 
+        0 0 30px #00ff41,
+        inset 0 0 20px #00ff4180;
+    font-size: 14px;
+    font-weight: 800;
+    transform: scale(1.05);
+}
+
+.block.revealed.red {
+    background: linear-gradient(145deg, #ff4444, #cc3333);
+    color: #000;
+    border-color: #ff4444;
+    box-shadow: 
+        0 0 30px #ff4444,
+        inset 0 0 20px #ff444480;
+    font-size: 14px;
+    font-weight: 800;
+}
+
+.block.revealed.green.guaranteed {
+    background: linear-gradient(145deg, #00ff41, #ffff00, #00ff41);
+    box-shadow: 
+        0 0 40px #ffff00,
+        inset 0 0 30px #ffff0080;
+    border-color: #ffff00;
+    font-size: 14px;
+    font-weight: 800;
+    animation: glow 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes glow {
+    from { box-shadow: 0 0 30px #ffff00; }
+    to { box-shadow: 0 0 50px #ffff00, 0 0 70px #ffff0040; }
+}
+
+.block-number {
+    font-size: 32px;
+    opacity: 0.9;
+    font-weight: 800;
+    text-shadow: 0 2px 4px #00000080;
+}
+
+.block-wallet {
+    font-size: 9px;
+    position: absolute;
+    bottom: 4px;
+    left: 4px;
+    right: 4px;
+    text-align: center;
+    background: rgba(0, 0, 0, 0.85);
+    padding: 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 700;
+    border-radius: 3px;
+}
+
+.block-sol {
+    font-size: 10px;
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: rgba(0, 0, 0, 0.85);
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-weight: 700;
+}
+
+.block-free {
+    font-size: 10px;
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    background: rgba(0, 0, 0, 0.85);
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-weight: 700;
+    color: #00ff41;
+}
+
+.winners-section,
+.previous-winners-section,
+.holders-section {
+    margin: 15px 0;
+    padding: 15px;
+    border: 1px solid;
+    background: rgba(255, 255, 0, 0.03);
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+}
+
+.winners-section {
+    border-color: #ffff00;
+    background: rgba(255, 255, 0, 0.03);
+}
+.previous-winners-section {
+    border-color: #00ffff;
+    background: rgba(0, 255, 255, 0.03);
+}
+.holders-section {
+    border-color: #ff00ff;
+    background: rgba(255, 0, 255, 0.03);
+}
+
+.winners-title,
+.previous-winners-title,
+.holders-title {
+    font-weight: 700;
+    margin-bottom: 12px;
+    text-align: center;
+    font-size: 16px;
+    text-shadow: 0 0 10px currentColor;
+}
+
+.winners-title { color: #ffff00; }
+.previous-winners-title { color: #00ffff; }
+.holders-title { color: #ff00ff; }
+
+.winner-list, 
+.holders-list {
+    max-height: 200px;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 8px;
+}
+
+.winner-item {
+    padding: 8px;
+    background: rgba(255, 255, 0, 0.08);
+    border-left: 3px solid #ffff00;
+    border-radius: 4px;
+    font-size: 10px;
+    transition: all 0.3s ease;
+}
+
+.winner-item:hover {
+    transform: translateX(4px);
+    background: rgba(255, 255, 0, 0.15);
+}
+
+.winner-item.million-holder {
+    background: rgba(255, 255, 0, 0.2);
+    border-left: 3px solid #ff00ff;
+}
+
+.winner-item.free {
+    background: rgba(0, 255, 0, 0.15);
+    border-left: 3px solid #00ff00;
+}
+
+.previous-winner-item {
+    padding: 6px;
+    background: rgba(0, 255, 255, 0.08);
+    border-left: 3px solid #00ffff;
+    border-radius: 4px;
+    font-size: 9px;
+    opacity: 0.9;
+}
+
+.holder-item {
+    padding: 8px;
+    background: rgba(255, 0, 255, 0.08);
+    border-left: 3px solid #ff00ff;
+    border-radius: 4px;
+    font-size: 10px;
+    transition: all 0.3s ease;
+}
+
+.holder-item.assigned {
+    background: rgba(0, 255, 0, 0.15);
+    border-left: 3px solid #00ff00;
+}
+
+.holder-item.invalid {
+    background: rgba(255, 0, 0, 0.1);
+    border-left: 3px solid #ff0000;
+    opacity: 0.7;
+}
+
+.winner-wallet, 
+.holder-wallet {
+    font-weight: 700;
+    margin-bottom: 3px;
+    word-break: break-all;
+    font-size: 11px;
+}
+
+.winner-wallet a, 
+.holder-wallet a {
+    color: inherit;
+    text-decoration: none;
+    transition: all 0.3s ease;
+}
+
+.winner-wallet a:hover, 
+.holder-wallet a:hover {
+    text-shadow: 0 0 8px currentColor;
+    text-decoration: none;
+}
+
+.winner-details, 
+.holder-details {
+    font-size: 9px;
+    color: #ccc;
+}
+
+.winner-details a, 
+.holder-details a {
+    color: #00ff41;
+    text-decoration: none;
+    margin-right: 8px;
+    transition: all 0.3s ease;
+}
+
+.winner-details a:hover, 
+.holder-details a:hover {
+    text-shadow: 0 0 8px #00ff41;
+}
+
+.stats-section {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin: 15px 0;
+}
+
+.stat-card {
+    padding: 12px;
+    border: 1px solid #00ff41;
+    background: rgba(0, 255, 65, 0.03);
+    text-align: center;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px #00ff4120;
+}
+
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, #00ff4110, transparent);
+    transition: left 0.5s ease;
+}
+
+.stat-card:hover::before {
+    left: 100%;
+}
+
+.stat-value {
+    font-size: 16px;
+    font-weight: 800;
+    color: #ffff00;
+    margin: 3px 0;
+    text-shadow: 0 0 10px #ffff0080;
+}
+
+.stat-label {
+    font-size: 10px;
+    color: #00ff41;
+    opacity: 0.9;
+    font-weight: 500;
+}
+
+.console-section {
+    background: #000;
+    border: 1px solid #00ff41;
+    height: 180px;
+    overflow-y: auto;
+    margin: 15px 0;
+    padding: 8px;
+    font-size: 9px;
+    border-radius: 6px;
+    box-shadow: inset 0 0 20px #00000080;
+}
+
+.console-line {
+    margin: 1px 0;
+    word-break: break-all;
+    padding: 2px 4px;
+    border-radius: 2px;
+    transition: all 0.3s ease;
+}
+
+.console-line:hover {
+    background: rgba(0, 255, 65, 0.05);
+}
+
+.console-info { color: #00ff41; }
+.console-success { color: #ffff00; }
+.console-error { color: #ff4444; }
+.console-warning { color: #ffaa00; }
+
+.connection-status {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    padding: 4px 8px;
+    background: rgba(0, 0, 0, 0.9);
+    border: 1px solid #00ff41;
+    font-size: 9px;
+    border-radius: 4px;
+    z-index: 1000;
+    backdrop-filter: blur(5px);
+}
+
+.status-connected { color: #00ff41; text-shadow: 0 0 8px #00ff41; }
+.status-disconnected { color: #ff4444; text-shadow: 0 0 8px #ff4444; }
+
+.game-rules {
+    margin: 15px 0;
+    padding: 12px;
+    border: 1px solid #00ff41;
+    background: rgba(0, 255, 65, 0.03);
+    border-radius: 6px;
+}
+
+.rules-title {
+    color: #00ff41;
+    font-weight: 700;
+    margin-bottom: 8px;
+    text-align: center;
+    font-size: 14px;
+}
+
+.rules-list {
+    font-size: 10px;
+    line-height: 1.5;
+    text-align: center;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+    width: 6px;
+}
+::-webkit-scrollbar-track {
+    background: #1a1a1a;
+    border-radius: 3px;
+}
+::-webkit-scrollbar-thumb {
+    background: #00ff41;
+    border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #00cc33;
+}
+
+@media (max-width: 768px) {
+    .minesweeper-grid {
+        grid-template-columns: repeat(2, 128px);
+        gap: 6px;
+        padding: 10px;
+    }
+    
+    .terminal-container {
+        padding: 8px;
+        margin: 5px;
+    }
+    
+    .winner-list, 
+    .holders-list {
+        grid-template-columns: 1fr;
+    }
+    
+    .stats-section {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+    
+    .game-header {
+        font-size: 20px;
+    }
+}
+
+@media (max-width: 480px) {
+    .minesweeper-grid {
+        grid-template-columns: repeat(2, 110px);
+        grid-auto-rows: 110px;
+    }
+    
+    .block {
+        width: 110px;
+        height: 110px;
+    }
+    
+    .block-number {
+        font-size: 24px;
+    }
+}
+</style>
 </head>
 <body>
     <div class="connection-status">
@@ -1376,6 +1578,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
