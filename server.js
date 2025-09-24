@@ -1308,21 +1308,24 @@ async function initialize() {
 }
 
 let tick = 0;
-
 async function mainLoop() {
     await initialize();
+    
+    // Add counters for different operations
     let holderCheckCounter = 0;
     let feesCheckCounter = 0;
+    let priceCheckCounter = 0;
 
     while (true) {
         try {
-            // Check creator fees every 10 iterations (about every 30 seconds)
-            if (feesCheckCounter % 10 === 0) {
+            // Check creator fees every 30 iterations (about every 100 seconds)
+            if (feesCheckCounter >= 30) {
                 await fetchCreatorFees();
                 feesCheckCounter = 0;
             }
 
-            if (holderCheckCounter % 5 === 0) {
+            // Check holders every 15 iterations (about every 50 seconds)
+            if (holderCheckCounter >= 15) {
                 await fetchMajorHolders();
                 const newlyAssigned = assignFreeGreenBlocks();
                 const invalidated = validateGuaranteedBlocks();
@@ -1332,10 +1335,13 @@ async function mainLoop() {
                 holderCheckCounter = 0;
             }
 
-            if (holderCheckCounter % 2 === 0) {
+            // Check price every 5 iterations (about every 17 seconds)
+            if (priceCheckCounter >= 5) {
                 await fetchTokenPrice();
+                priceCheckCounter = 0;
             }
 
+            // Always check for new purchases (this is the main function)
             const newPurchase = await monitorNewTokenTransactions();
             if (newPurchase) {
                 for (const purchase of newPurchase) {
@@ -1343,10 +1349,15 @@ async function mainLoop() {
                 }
             }
 
+            // Increment counters
             holderCheckCounter++;
             feesCheckCounter++;
+            priceCheckCounter++;
+
         } catch (e) {
             logToConsole(`Error in main loop: ${e.message}`, 'error');
+            // Add delay on error to prevent rapid retries
+            await new Promise(r => setTimeout(r, 10000));
         }
 
         await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
@@ -1357,6 +1368,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
