@@ -4,17 +4,8 @@ import { OnlinePumpSdk } from "@pump-fun/pump-sdk";
 import { WebSocketServer } from 'ws';
 import http from 'http';
 const RPC_ENDPOINTS = [
-    "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a",
-    "https://api.mainnet-beta.solana.com" // Default mainnet RPC
-];
+    "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a"];
 
-function getRandomRpcEndpoint() {
-    const randomIndex = Math.random() < 0.5 ? 0 : 1;
-    return RPC_ENDPOINTS[randomIndex];
-}
-
-// Usage: Get a random RPC endpoint each time it's needed
-const RPC_ENDPOINT = getRandomRpcEndpoint();
 const TOKEN_MINT = "4xVsawMYeSK7dPo9acp62bDFaDmrsCrSVXmEEBZrpump";
 const POLL_INTERVAL_MS = 2500;
 const MIN_SOL_FOR_BLOCK = 0.1;
@@ -1366,6 +1357,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
