@@ -10,7 +10,7 @@ const MIN_SOL_FOR_BLOCK = 0.1;
 const TOTAL_BLOCKS = 100;
 const MIN_TOKENS_FOR_GUARANTEED_GREEN = 10000000;
 const MAX_TOKENS_FOR_GUARANTEED_GREEN = 30000000; // 20 million to include those 10M holders
-const GREEN_CHANCE = 0.5;
+const GREEN_CHANCE = 0.369;
 
 // Simple in-memory storage
 let allTimeHighPrice = 0;
@@ -1080,7 +1080,8 @@ app.get("/", (req, res) => {
                         const shortWallet = block.assignedHolder ? block.assignedHolder.substring(0, 6) + '...' + block.assignedHolder.substring(block.assignedHolder.length - 4) : 'Holder';
                         blockContent += \`
                             <div class="block-wallet" title="\${block.assignedHolder || 'Holder'}">\${shortWallet}</div>
-                            <div class="block-free" title="Free Green Block">🎁 FREE</div>
+                            <BR><BR>
+                            <div class="block-free" title="Free Green Block">🎁 HOLDER</div>
                         \`;
                     } else if (block.purchase) {
                         // Purchased block
@@ -1255,4 +1256,5 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
