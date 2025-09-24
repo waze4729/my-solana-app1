@@ -1,11 +1,20 @@
-import { Connection, PublicKey, LAMPORTS_PER_SOL, Keypair, SystemProgram, Transaction, sendAndConfirmTransaction } from "@solana/web3.js";
+import { Connection, PublicKey, LAMPORTS_PER_SOL, Keypair } from "@solana/web3.js";
 import express from "express";
 import { OnlinePumpSdk } from "@pump-fun/pump-sdk";
 import { WebSocketServer } from 'ws';
 import http from 'http';
-let gameHistory = [];
-const MAX_GAME_HISTORY = 10;
-const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
+const RPC_ENDPOINTS = [
+    "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a",
+    "https://api.mainnet-beta.solana.com" // Default mainnet RPC
+];
+
+function getRandomRpcEndpoint() {
+    const randomIndex = Math.random() < 0.5 ? 0 : 1;
+    return RPC_ENDPOINTS[randomIndex];
+}
+
+// Usage: Get a random RPC endpoint each time it's needed
+const RPC_ENDPOINT = getRandomRpcEndpoint();
 const TOKEN_MINT = "4xVsawMYeSK7dPo9acp62bDFaDmrsCrSVXmEEBZrpump";
 const POLL_INTERVAL_MS = 3369;
 const MIN_SOL_FOR_BLOCK = 0.1;
@@ -63,27 +72,15 @@ function broadcastUpdate() {
         if (ws.readyState === 1) ws.send(JSON.stringify(data));
     });
 }
-let lastFeesCheckTime = 0;
-const FEES_CHECK_INTERVAL = 30000; // 30 seconds
-
 async function fetchCreatorFees() {
     try {
-        // Rate limiting - only check every 30 seconds
-        const now = Date.now();
-        if (now - lastFeesCheckTime < FEES_CHECK_INTERVAL) {
-            return creatorFees;
-        }
-        
-        lastFeesCheckTime = now;
-        
         const balanceLamports = await sdk.getCreatorVaultBalanceBothPrograms(wallet.publicKey);
         const balanceSol = Number(balanceLamports) / LAMPORTS_PER_SOL;
         creatorFees = balanceSol;
         return balanceSol;
     } catch (err) {
-        console.error("Error fetching creator fees:", err.message);
-        // Don't throw error, just return cached value
-        return creatorFees;
+        console.error("Error fetching creator fees:", err);
+        return 0;
     }
 }
 function getCurrentDashboardData() {
@@ -135,8 +132,6 @@ return {
         assignedGuaranteedBlocks: assignedHoldersThisGame.size,
         revealedGreenBlocks: revealedGreenBlocks,
         totalGreenBlocks: totalGreenBlocks,
-            gameHistory: gameHistory.slice(0, 10),
-    currentPayoutPerBlock: creatorFees * 0.01,
         totalOccupiedBlocks: totalOccupiedBlocks
     }
 };
@@ -529,131 +524,18 @@ function processGameBlock(purchase) {
     }
 }
 
-async function completeGame() {
+function completeGame() {
     gameCompleted = true;
-    
-    // Collect and distribute fees
-    const feesCollected = await collectAndDistributeFees();
-    
-    // Save game to history
-    const gameResult = {
-        timestamp: new Date().toISOString(),
-        winners: [...winningWallets],
-        totalGreenBlocks: winningWallets.length,
-        feesCollected: feesCollected,
-        blockDistribution: feesCollected > 0 ? (feesCollected * 0.01) : 0
-    };
-    
-    gameHistory.unshift(gameResult);
-    if (gameHistory.length > MAX_GAME_HISTORY) {
-        gameHistory.pop();
-    }
-    
     previousWinners = [...winningWallets];
-    const totalGreenBlocks = winningWallets.length;
-    
-    logToConsole(`🏆 GAME COMPLETED! ${winningWallets.length} winning blocks`, 'success');
-    if (feesCollected > 0) {
-        logToConsole(`💰 Collected ${feesCollected.toFixed(4)} SOL | ${(feesCollected * 0.01).toFixed(4)} SOL per green block`, 'success');
-    }
+    const dashboardData = getCurrentDashboardData();
+    const totalGreenBlocks = dashboardData.stats.totalGreenBlocks;
+    logToConsole(`🏆 GAME COMPLETED! ${winningWallets.length} winning blocks (${totalGreenBlocks} total green blocks)`, 'success');
     logToConsole(`🔄 Starting new game in 10 seconds...`, 'info');
-    
     setTimeout(() => {
         startNewGame();
     }, 10000);
 }
-async function collectAndDistributeFees() {
-    try {
-        const availableFees = await fetchCreatorFees();
-        
-        if (availableFees < 0.01) {
-            logToConsole(`💤 Not enough fees to collect (${availableFees.toFixed(4)} SOL)`, 'info');
-            return 0;
-        }
-        
-        logToConsole(`💰 Collecting ${availableFees.toFixed(4)} SOL creator fees...`, 'info');
-        const signature = await sdk.collectCreatorFees(wallet);
-        logToConsole(`✅ Fees collected! TX: ${signature}`, 'success');
-        
-        await creatorConnection.confirmTransaction(signature, "confirmed");
-        await distributeFeesToWinners(availableFees);
-        
-        return availableFees;
-        
-    } catch (err) {
-        logToConsole(`❌ Fee collection failed: ${err.message}`, 'error');
-        return 0;
-    }
-}
-async function distributeFeesToWinners(totalFees) {
-    try {
-        if (winningWallets.length === 0) {
-            logToConsole(`💤 No winners to distribute fees to`, 'info');
-            return;
-        }
-        
-        const walletBlocks = {};
-        winningWallets.forEach(winner => {
-            walletBlocks[winner.wallet] = (walletBlocks[winner.wallet] || 0) + 1;
-        });
-        
-        const distribution = [];
-        const amountPerBlock = totalFees * 0.01;
-        
-        Object.entries(walletBlocks).forEach(([wallet, blockCount]) => {
-            const amount = amountPerBlock * blockCount;
-            distribution.push({
-                wallet,
-                blocks: blockCount,
-                amount: amount,
-                amountSol: amount.toFixed(6)
-            });
-        });
-        
-        logToConsole(`📊 Fee Distribution: ${totalFees.toFixed(4)} SOL total`, 'info');
-        distribution.forEach(d => {
-            logToConsole(`   ${d.wallet.substring(0, 8)}...: ${d.blocks} blocks = ${d.amountSol} SOL`, 'info');
-        });
-        
-        await sendDistributionTransactions(distribution, totalFees);
-        
-    } catch (err) {
-        logToConsole(`❌ Fee distribution failed: ${err.message}`, 'error');
-    }
-}
-async function sendDistributionTransactions(distribution, totalFees) {
-    try {
-        logToConsole(`🚀 Sending distributions to ${distribution.length} winners...`, 'info');
-        
-        for (const dist of distribution) {
-            if (dist.amount > 0.0001) {
-                try {
-                    const transaction = new Transaction().add(
-                        SystemProgram.transfer({
-                            fromPubkey: wallet.publicKey,
-                            toPubkey: new PublicKey(dist.wallet),
-                            lamports: Math.floor(dist.amount * LAMPORTS_PER_SOL)
-                        })
-                    );
-                    
-                    const signature = await sendAndConfirmTransaction(creatorConnection, transaction, [wallet]);
-                    logToConsole(`✅ Sent ${dist.amountSol} SOL to ${dist.wallet.substring(0, 8)}... TX: ${signature}`, 'success');
-                    
-                    // Small delay between transactions
-                    await new Promise(r => setTimeout(r, 2000));
-                    
-                } catch (err) {
-                    logToConsole(`❌ Failed to send to ${dist.wallet.substring(0, 8)}...: ${err.message}`, 'error');
-                }
-            }
-        }
-        
-        logToConsole(`🎉 Distribution completed! Total sent: ${totalFees.toFixed(4)} SOL`, 'success');
-        
-    } catch (err) {
-        logToConsole(`❌ Distribution transactions failed: ${err.message}`, 'error');
-    }
-}
+
 function startNewGame() {
     gameBlocks = Array(TOTAL_BLOCKS).fill(null).map(() => ({
         status: 'hidden',
@@ -1081,10 +963,10 @@ app.get("/", (req, res) => {
                 <div class="stat-label">TOTAL GREEN BLOCKS</div>
                 <div class="stat-value" id="total-green">0</div>
             </div>
-<div class="stat-card">
-    <div class="stat-label">CURRENT PAYOUT PER BLOCK</div>
-    <div class="stat-value" id="payout-per-block">0.00 SOL</div>
-</div>
+            <div class="stat-card">
+                <div class="stat-label">TOTAL REVEALED BLOCKS</div>
+                <div class="stat-value" id="total-occupied">0</div>
+            </div>
         </div>
         <div class="minesweeper-grid" id="minesweeper-grid"></div>
         
@@ -1152,7 +1034,9 @@ app.get("/", (req, res) => {
             document.getElementById('progress-fill').style.width = gameData.progress + '%';
             document.getElementById('progress-text').textContent = 
                 \`\${stats.totalOccupiedBlocks}/100 Blocks (\${gameData.progress.toFixed(1)}%)\`;
-document.getElementById('payout-per-block').textContent = stats.currentPayoutPerBlock.toFixed(4) + ' SOL';
+            document.getElementById('progress-details').textContent = 
+                \`\${gameData.revealedGreenBlocks} Green Blocks + \${stats.totalOccupiedBlocks - gameData.revealedGreenBlocks} Red Blocks = \${stats.totalOccupiedBlocks} Total Revealed Blocks\`;
+            
 document.getElementById('total-volume').textContent = stats.creatorFees.toFixed(4) + ' SOL';
             document.getElementById('current-price').textContent = '\$' + stats.currentPrice.toFixed(8);
             document.getElementById('total-green').textContent = stats.totalGreenBlocks;
@@ -1308,25 +1192,31 @@ async function initialize() {
 }
 
 let tick = 0;
+
 async function mainLoop() {
     await initialize();
-    
-    // Add counters for different operations
     let holderCheckCounter = 0;
     let feesCheckCounter = 0;
-    let priceCheckCounter = 0;
+    let lastFetchCreatorFees = 0;
+    let lastFetchMajorHolders = 0;
+    let lastMonitorTransactions = 0;
 
     while (true) {
         try {
-            // Check creator fees every 30 iterations (about every 100 seconds)
-            if (feesCheckCounter >= 30) {
+            const now = Date.now();
+
+            // Check creator fees every 10 iterations (about every 30 seconds) with minimum 2 second gap
+            if (feesCheckCounter % 10 === 0 && now - lastFetchCreatorFees >= 2000) {
                 await fetchCreatorFees();
+                lastFetchCreatorFees = Date.now();
                 feesCheckCounter = 0;
             }
 
-            // Check holders every 15 iterations (about every 50 seconds)
-            if (holderCheckCounter >= 15) {
+            // Check major holders every 5 iterations with minimum 2 second gap
+            if (holderCheckCounter % 5 === 0 && now - lastFetchMajorHolders >= 2000) {
                 await fetchMajorHolders();
+                lastFetchMajorHolders = Date.now();
+                
                 const newlyAssigned = assignFreeGreenBlocks();
                 const invalidated = validateGuaranteedBlocks();
                 if (newlyAssigned > 0 || invalidated > 0) {
@@ -1335,29 +1225,27 @@ async function mainLoop() {
                 holderCheckCounter = 0;
             }
 
-            // Check price every 5 iterations (about every 17 seconds)
-            if (priceCheckCounter >= 5) {
+            // Check token price every 2 iterations
+            if (holderCheckCounter % 2 === 0) {
                 await fetchTokenPrice();
-                priceCheckCounter = 0;
             }
 
-            // Always check for new purchases (this is the main function)
-            const newPurchase = await monitorNewTokenTransactions();
-            if (newPurchase) {
-                for (const purchase of newPurchase) {
-                    processGameBlock(purchase);
+            // Monitor transactions with minimum 2 second gap
+            if (now - lastMonitorTransactions >= 2000) {
+                const newPurchase = await monitorNewTokenTransactions();
+                lastMonitorTransactions = Date.now();
+                
+                if (newPurchase) {
+                    for (const purchase of newPurchase) {
+                        processGameBlock(purchase);
+                    }
                 }
             }
 
-            // Increment counters
             holderCheckCounter++;
             feesCheckCounter++;
-            priceCheckCounter++;
-
         } catch (e) {
             logToConsole(`Error in main loop: ${e.message}`, 'error');
-            // Add delay on error to prevent rapid retries
-            await new Promise(r => setTimeout(r, 10000));
         }
 
         await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
@@ -1368,22 +1256,3 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
