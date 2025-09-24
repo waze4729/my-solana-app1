@@ -63,15 +63,27 @@ function broadcastUpdate() {
         if (ws.readyState === 1) ws.send(JSON.stringify(data));
     });
 }
+let lastFeesCheckTime = 0;
+const FEES_CHECK_INTERVAL = 30000; // 30 seconds
+
 async function fetchCreatorFees() {
     try {
+        // Rate limiting - only check every 30 seconds
+        const now = Date.now();
+        if (now - lastFeesCheckTime < FEES_CHECK_INTERVAL) {
+            return creatorFees;
+        }
+        
+        lastFeesCheckTime = now;
+        
         const balanceLamports = await sdk.getCreatorVaultBalanceBothPrograms(wallet.publicKey);
         const balanceSol = Number(balanceLamports) / LAMPORTS_PER_SOL;
         creatorFees = balanceSol;
         return balanceSol;
     } catch (err) {
-        console.error("Error fetching creator fees:", err);
-        return 0;
+        console.error("Error fetching creator fees:", err.message);
+        // Don't throw error, just return cached value
+        return creatorFees;
     }
 }
 function getCurrentDashboardData() {
@@ -1345,6 +1357,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
