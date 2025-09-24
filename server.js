@@ -3,7 +3,7 @@ import express from "express";
 import { OnlinePumpSdk } from "@pump-fun/pump-sdk";
 import { WebSocketServer } from 'ws';
 import http from 'http';
-console.log("Wallet from env:", process.env.WALLET_SECRET_KEY);
+
 const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
 const TOKEN_MINT = "4xVsawMYeSK7dPo9acp62bDFaDmrsCrSVXmEEBZrpump";
 const POLL_INTERVAL_MS = 3369;
@@ -18,7 +18,8 @@ let creatorFees = 0;
 let lastFeesCheck = 0;
 // Get wallet from environment variable
 const walletSecretKey = JSON.parse(process.env.WALLET_SECRET_KEY);
-const wallet = Keypair.fromSecretKey(new Uint8Array(walletSecretKey));
+const SECRET_KEY = new Uint8Array(walletSecretKey);
+const wallet = Keypair.fromSecretKey(SECRET_KEY);
 // Simple in-memory storage
 let allTimeHighPrice = 0;
 let currentPrice = 0;
@@ -1230,6 +1231,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
