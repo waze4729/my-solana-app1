@@ -519,32 +519,6 @@ async function monitorNewTokenTransactions() {
         logToConsole(`Error in monitorNewTokenTransactions: ${e.message}`, 'error');
         return null;
     }
-}async function analyzeTokenPurchase(tx, signature) {
-    try {
-        if (!tx?.transaction || !tx.meta) return null;
-
-        const { solSpent, buyer } = calculateSolSpent(tx);
-        
-        // Only consider purchases of 0.1 SOL or more (block purchases)
-        if (solSpent < 0.09 || !buyer) return null;
-
-        // Check if buyer is a major holder
-        const isMillionTokenHolder = majorHolders.has(buyer) && 
-                                   majorHolders.get(buyer).tokens >= MIN_TOKENS_FOR_GUARANTEED_GREEN;
-
-        return {
-            wallet: buyer,
-            signature: signature,
-            timestamp: new Date().toISOString(),
-            txTime: Date.now(),
-            solAmount: solSpent,
-            isMillionTokenHolder: isMillionTokenHolder,
-            holderTokens: isMillionTokenHolder ? majorHolders.get(buyer).tokens : 0
-        };
-
-    } catch (e) {
-        return null;
-    }
 }
 // Process individual account in batch
 async function processAccountBatch(tokenAccountPubkey, tokenAmount, tokenAccountKey) {
@@ -1371,6 +1345,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
