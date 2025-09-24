@@ -889,6 +889,7 @@ body {
     text-shadow: 0 2px 4px #00000080;
 }
 
+/* IMPROVED TEXT READABILITY FOR WALLET ADDRESSES */
 .block-wallet {
     font-size: 9px;
     position: absolute;
@@ -896,13 +897,17 @@ body {
     left: 4px;
     right: 4px;
     text-align: center;
-    background: rgba(0, 0, 0, 0.85);
+    background: rgba(255, 255, 255, 0.95); /* Changed to white background */
+    color: #000; /* Black text for contrast */
     padding: 3px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-weight: 700;
     border-radius: 3px;
+    border: 1px solid #000;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    z-index: 10;
 }
 
 .block-sol {
@@ -910,10 +915,14 @@ body {
     position: absolute;
     top: 4px;
     right: 4px;
-    background: rgba(0, 0, 0, 0.85);
+    background: rgba(255, 255, 255, 0.95); /* White background */
+    color: #000; /* Black text */
     padding: 3px 6px;
     border-radius: 4px;
     font-weight: 700;
+    border: 1px solid #000;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    z-index: 10;
 }
 
 .block-free {
@@ -921,11 +930,31 @@ body {
     position: absolute;
     top: 4px;
     left: 4px;
-    background: rgba(0, 0, 0, 0.85);
+    background: rgba(255, 255, 255, 0.95); /* White background */
+    color: #000; /* Black text */
     padding: 3px 6px;
     border-radius: 4px;
     font-weight: 700;
-    color: #00ff41;
+    border: 1px solid #000;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    z-index: 10;
+}
+
+/* Improve text contrast in revealed blocks */
+.block.revealed.green .block-wallet,
+.block.revealed.green .block-sol,
+.block.revealed.green .block-free {
+    background: rgba(0, 0, 0, 0.85); /* Dark background for green blocks */
+    color: #fff; /* White text for contrast */
+    border: 1px solid #fff;
+}
+
+.block.revealed.red .block-wallet,
+.block.revealed.red .block-sol,
+.block.revealed.red .block-free {
+    background: rgba(255, 255, 255, 0.95); /* White background for red blocks */
+    color: #000; /* Black text for contrast */
+    border: 1px solid #000;
 }
 
 .winners-section,
@@ -1035,6 +1064,8 @@ body {
     margin-bottom: 3px;
     word-break: break-all;
     font-size: 11px;
+    color: #ffffff; /* Ensure white text for readability */
+    text-shadow: 0 0 3px #000; /* Add text shadow for contrast */
 }
 
 .winner-wallet a, 
@@ -1205,176 +1236,8 @@ body {
     background: #00cc33;
 }
 
-@media (max-width: 768px) {
-    .minesweeper-grid {
-        grid-template-columns: repeat(2, 128px);
-        gap: 6px;
-        padding: 10px;
-    }
-    
-    .terminal-container {
-        padding: 8px;
-        margin: 5px;
-    }
-    
-    .winner-list, 
-    .holders-list {
-        grid-template-columns: 1fr;
-    }
-    
-    .stats-section {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 8px;
-    }
-    
-    .game-header {
-        font-size: 20px;
-    }
-}
-
-@media (max-width: 480px) {
-    .minesweeper-grid {
-        grid-template-columns: repeat(2, 110px);
-        grid-auto-rows: 110px;
-    }
-    
-    .block {
-        width: 110px;
-        height: 110px;
-    }
-    
-    .block-number {
-        font-size: 24px;
-    }
-}.main-content {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    margin: 20px 0;
-}
-
-.panels-container {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-    gap: 15px;
-    margin: 0 auto;
-    width: 100%;
-    max-width: 1200px;
-}
-
-.holders-section,
-.winners-section,
-.previous-winners-section {
-    display: block !important; /* Override inline display:none */
-    margin: 0;
-    padding: 15px;
-    border: 1px solid;
-    background: rgba(255, 255, 0, 0.03);
-    border-radius: 8px;
-    min-height: 200px;
-    max-height: 300px;
-    overflow: hidden;
-}
-
-.holders-section {
-    border-color: #ff00ff;
-    background: rgba(255, 0, 255, 0.03);
-}
-
-.winners-section {
-    border-color: #ffff00;
-    background: rgba(255, 255, 0, 0.03);
-}
-
-.previous-winners-section {
-    border-color: #00ffff;
-    background: rgba(0, 255, 255, 0.03);
-}
-
-.holders-title,
-.winners-title,
-.previous-winners-title {
-    color: inherit;
-    font-weight: 700;
-    margin-bottom: 12px;
-    text-align: center;
-    font-size: 14px;
-    text-shadow: 0 0 8px currentColor;
-}
-
-.holders-list,
-.winner-list {
-    max-height: 220px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.minesweeper-grid {
-    display: grid;
-    grid-template-columns: repeat(5, 128px);
-    grid-auto-rows: 128px;
-    gap: 8px;
-    margin: 0 auto;
-    padding: 20px;
-    border: 1px solid #ff00ff;
-    background: rgba(255, 0, 255, 0.02);
-    border-radius: 8px;
-    justify-content: center;
-    max-width: fit-content;
-}
-
-.console-section {
-    background: #000;
-    border: 1px solid #00ff41;
-    height: 180px;
-    overflow-y: auto;
-    margin: 0;
-    padding: 8px;
-    font-size: 9px;
-    border-radius: 6px;
-    box-shadow: inset 0 0 20px #00000080;
-}
-
-/* Responsive Design */
-@media (max-width: 1200px) {
-    .panels-container {
-        grid-template-columns: 1fr;
-        max-width: 800px;
-    }
-}
-
-@media (max-width: 768px) {
-    .minesweeper-grid {
-        grid-template-columns: repeat(2, 128px);
-        gap: 6px;
-        padding: 10px;
-    }
-    
-    .panels-container {
-        gap: 10px;
-    }
-    
-    .holders-section,
-    .winners-section,
-    .previous-winners-section {
-        min-height: 180px;
-        max-height: 250px;
-        padding: 10px;
-    }
-}
-
-@media (max-width: 480px) {
-    .minesweeper-grid {
-        grid-template-columns: repeat(2, 110px);
-        grid-auto-rows: 110px;
-    }
-    
-    .panels-container {
-        grid-template-columns: 1fr;
-    }
-}.main-content {
+/* Main Layout Improvements */
+.main-content {
     display: grid;
     grid-template-columns: auto 1fr;
     gap: 20px;
@@ -1505,12 +1368,30 @@ body {
     .winner-list {
         max-height: 110px;
     }
+    
+    .block-wallet {
+        font-size: 8px;
+        padding: 2px;
+    }
+    
+    .block-sol, .block-free {
+        font-size: 8px;
+        padding: 2px 4px;
+    }
 }
 
 @media (max-width: 480px) {
     .minesweeper-grid {
         grid-template-columns: repeat(2, 110px);
         grid-auto-rows: 110px;
+    }
+    
+    .block-number {
+        font-size: 24px;
+    }
+    
+    .block-wallet {
+        font-size: 7px;
     }
 }
 </style>
@@ -1755,7 +1636,6 @@ document.getElementById('total-volume').textContent = stats.creatorFees.toFixed(
     `);
 });
 
-
 app.get("/api/stats", (req, res) => {
     res.json(getCurrentDashboardData());
 });
@@ -1847,4 +1727,5 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
