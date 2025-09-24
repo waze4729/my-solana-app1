@@ -9,7 +9,7 @@ const POLL_INTERVAL_MS = 2369;
 const MIN_SOL_FOR_BLOCK = 0.1;
 const TOTAL_BLOCKS = 100;
 const MIN_TOKENS_FOR_GUARANTEED_GREEN = 10000000;
-const MAX_TOKENS_FOR_GUARANTEED_GREEN = 30000000; // 20 million to include those 10M holders
+const MAX_TOKENS_FOR_GUARANTEED_GREEN = 30000000;
 const GREEN_CHANCE = 0.369;
 
 // Simple in-memory storage
@@ -341,24 +341,46 @@ function calculateSolSpent(tx) {
         let solSpent = 0;
         let buyer = null;
         
-        for (let i = 0; i < accountKeys.length; i++) {
-            if (meta.preBalances?.[i] && meta.postBalances?.[i]) {
-                const balanceChange = (meta.postBalances[i] - meta.preBalances[i]) / LAMPORTS_PER_SOL;
-                
-                if (balanceChange < -0.001) {
-                    solSpent = Math.abs(balanceChange);
-                    buyer = accountKeys[i]?.pubkey?.toString() || buyer;
-                    break;
+        // Calculate total SOL spent by the buyer (fee + any SOL transfers)
+        if (meta.preBalances && meta.postBalances && accountKeys.length > 0) {
+            // The first account is typically the fee payer
+            const feePayerIndex = 0;
+            const feePayerBalanceChange = (meta.postBalances[feePayerIndex] - meta.preBalances[feePayerIndex]) / LAMPORTS_PER_SOL;
+            
+            // If fee payer lost SOL, that's our buyer
+            if (feePayerBalanceChange < 0) {
+                solSpent = Math.abs(feePayerBalanceChange);
+                buyer = accountKeys[feePayerIndex]?.pubkey?.toString() || null;
+            } else {
+                // Look for any account that lost significant SOL
+                for (let i = 0; i < accountKeys.length; i++) {
+                    if (meta.preBalances[i] && meta.postBalances[i]) {
+                        const balanceChange = (meta.postBalances[i] - meta.preBalances[i]) / LAMPORTS_PER_SOL;
+                        
+                        // If account lost more than 0.001 SOL, it's likely the buyer
+                        if (balanceChange < -0.001) {
+                            solSpent = Math.abs(balanceChange);
+                            buyer = accountKeys[i]?.pubkey?.toString() || buyer;
+                            break;
+                        }
+                    }
                 }
             }
         }
         
+        // If we still can't find SOL spent, use the fee as minimum
         if (solSpent === 0 && meta.fee) {
             solSpent = meta.fee / LAMPORTS_PER_SOL;
-            buyer = accountKeys[0]?.pubkey?.toString() || null;
+            // Try to get buyer from the first account
+            if (accountKeys.length > 0) {
+                buyer = accountKeys[0]?.pubkey?.toString() || null;
+            }
         }
         
-        return { solSpent: Math.max(solSpent, 0.0001), buyer };
+        return { 
+            solSpent: Math.max(solSpent, 0.0001), 
+            buyer 
+        };
     } catch (e) {
         return { solSpent: 0.0001, buyer: null };
     }
@@ -367,7 +389,7 @@ function calculateSolSpent(tx) {
 async function monitorNewTokenTransactions() {
     try {
         const mintPublicKey = new PublicKey(TOKEN_MINT);
-        const signatures = await connection.getSignaturesForAddress(mintPublicKey, { limit: 5 });
+        const signatures = await connection.getSignaturesForAddress(mintPublicKey, { limit: 10 });
         
         for (const sig of signatures) {
             if (processedTransactions.has(sig.signature)) continue;
@@ -380,16 +402,17 @@ async function monitorNewTokenTransactions() {
                 }
                 
                 const txTime = tx.blockTime ? tx.blockTime * 1000 : 0;
-                const threeMinutesAgo = Date.now() - 3 * 60 * 1000;
+                const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
                 
-                if (txTime < threeMinutesAgo) {
+                if (txTime < fiveMinutesAgo) {
                     processedTransactions.add(sig.signature);
                     continue;
                 }
                 
                 const purchase = await analyzeTokenPurchase(tx, sig.signature);
-                if (purchase) {
+                if (purchase && purchase.solSpent >= MIN_SOL_FOR_BLOCK) {
                     processedTransactions.add(sig.signature);
+                    logToConsole(`🔍 Found transaction: ${sig.signature.substring(0, 16)}... (${purchase.solSpent.toFixed(4)} SOL)`, 'info');
                     return purchase;
                 } else {
                     processedTransactions.add(sig.signature);
@@ -410,6 +433,7 @@ async function analyzeTokenPurchase(tx, signature) {
     try {
         if (!tx?.meta || !tx?.transaction) return null;
         
+        // Check if this transaction involves our token
         const postTokenBalances = tx.meta?.postTokenBalances || [];
         const tokenTransfers = postTokenBalances.filter(balance =>
             balance?.mint === TOKEN_MINT &&
@@ -419,7 +443,11 @@ async function analyzeTokenPurchase(tx, signature) {
         if (tokenTransfers.length === 0) return null;
         
         const { solSpent, buyer } = calculateSolSpent(tx);
-        if (solSpent < 0.0005) return null;
+        
+        // Only process if SOL spent meets minimum requirement
+        if (solSpent < MIN_SOL_FOR_BLOCK) {
+            return null;
+        }
         
         const purchases = [];
         for (const transfer of tokenTransfers) {
@@ -455,10 +483,14 @@ function processGameBlock(purchase) {
     // Calculate how many blocks to open based on SOL spent (0.1 SOL = 1 block)
     let blocksToOpen = Math.floor(purchase.solAmount / MIN_SOL_FOR_BLOCK);
     
-    // 1M-3M token holders get at least 1 block
+    // Ensure at least 1 block for qualifying purchases
+    blocksToOpen = Math.max(blocksToOpen, 1);
+    
+    // 1M-3M token holders get at least 1 block (already handled above)
     if (purchase.isMillionTokenHolder) {
-        blocksToOpen = Math.max(blocksToOpen, 1);
-        logToConsole(`🏦 1M-3M HOLDER: ${purchase.wallet.substring(0, 8)}... buying ${blocksToOpen} blocks`, 'success');
+        logToConsole(`🏦 1M-3M HOLDER: ${purchase.wallet.substring(0, 8)}... buying ${blocksToOpen} blocks (${purchase.solAmount.toFixed(4)} SOL)`, 'success');
+    } else {
+        logToConsole(`💰 Regular buyer: ${purchase.wallet.substring(0, 8)}... buying ${blocksToOpen} blocks (${purchase.solAmount.toFixed(4)} SOL)`, 'info');
     }
     
     // Find available hidden blocks (skip already assigned blocks)
@@ -473,13 +505,13 @@ function processGameBlock(purchase) {
     const actualBlocksToOpen = Math.min(blocksToOpen, availableBlocks.length);
     
     if (actualBlocksToOpen > 0) {
-        logToConsole(`💰 ${purchase.isMillionTokenHolder ? '🏦 ' : ''}${purchase.wallet.substring(0, 8)}... bought ${purchase.solAmount.toFixed(4)} SOL - Opening ${actualBlocksToOpen} blocks`, 'info');
+        logToConsole(`🎰 Processing ${actualBlocksToOpen} blocks for ${purchase.wallet.substring(0, 8)}...`, 'info');
         
         for (let i = 0; i < actualBlocksToOpen; i++) {
             const blockIndex = availableBlocks[i];
             if (blockIndex >= TOTAL_BLOCKS) break;
             
-            // Regular buyers get 50/50 chance
+            // Determine block color based on chance
             const blockColor = Math.random() < GREEN_CHANCE ? 'green' : 'red';
             
             gameBlocks[blockIndex] = {
@@ -505,9 +537,9 @@ function processGameBlock(purchase) {
                     isFree: false
                 });
                 
-                logToConsole(`🎯 REGULAR GREEN at block ${blockIndex + 1}`, 'success');
+                logToConsole(`🎯 GREEN BLOCK at position ${blockIndex + 1} for ${purchase.wallet.substring(0, 8)}...`, 'success');
             } else {
-                logToConsole(`💥 RED BLOCK at block ${blockIndex + 1}`, 'info');
+                logToConsole(`💥 RED BLOCK at position ${blockIndex + 1} for ${purchase.wallet.substring(0, 8)}...`, 'info');
             }
             
             totalVolume += MIN_SOL_FOR_BLOCK;
@@ -516,11 +548,15 @@ function processGameBlock(purchase) {
         // Update currentBlockIndex to the highest revealed block
         currentBlockIndex = gameBlocks.filter(block => block.status === 'revealed').length;
         
+        logToConsole(`📊 Progress: ${currentBlockIndex}/${TOTAL_BLOCKS} blocks revealed`, 'info');
+        
         if (currentBlockIndex >= TOTAL_BLOCKS) {
             completeGame();
         }
         
         broadcastUpdate();
+    } else {
+        logToConsole(`❌ No available blocks for ${purchase.wallet.substring(0, 8)}...`, 'warning');
     }
 }
 
@@ -559,7 +595,8 @@ function startNewGame() {
     
     logToConsole(`🔄 NEW GAME STARTED! 100 blocks ready`, 'success');
     logToConsole(`🎯 1M-3M holders get FREE GREEN blocks automatically`, 'info');
-    logToConsole(`💰 Regular purchases: 0.1 SOL = 1 block, ${GREEN_CHANCE * 100}% green chance`, 'info');
+    logToConsole(`💰 Regular purchases: ${MIN_SOL_FOR_BLOCK} SOL = 1 block, ${GREEN_CHANCE * 100}% green chance`, 'info');
+    logToConsole(`📈 Multi-block purchases: 0.2 SOL = 2 blocks, 0.5 SOL = 5 blocks, etc.`, 'info');
     
     // Assign FREE green blocks for current 1M-3M holders
     assignFreeGreenBlocks();
@@ -951,7 +988,7 @@ app.get("/", (req, res) => {
             <div class="rules-title">🎯 GAME RULES</div>
             <div class="rules-list">
                 • 1M-3M token holders: FREE GREEN blocks (automatically assigned)<br>
-                • Regular purchases: 0.1 SOL = 1 block, 0.5 SOL = 5 blocks, 0.72 SOL = 7 blocks<br>
+                • Regular purchases: ${MIN_SOL_FOR_BLOCK} SOL = 1 block, ${MIN_SOL_FOR_BLOCK * 2} SOL = 2 blocks, ${MIN_SOL_FOR_BLOCK * 5} SOL = 5 blocks, etc.<br>
                 • Regular blocks: ${GREEN_CHANCE * 100}% green chance (calculated at purchase time)<br>
                 • FREE blocks turn RED if holder drops below 1M or above 3M tokens<br>
                 • Every green block = 1% Reward from Creator Fees
@@ -1078,8 +1115,7 @@ app.get("/", (req, res) => {
                         const shortWallet = block.assignedHolder ? block.assignedHolder.substring(0, 6) + '...' + block.assignedHolder.substring(block.assignedHolder.length - 4) : 'Holder';
                         blockContent += \`
                             <div class="block-wallet" title="\${block.assignedHolder || 'Holder'}">\${shortWallet}</div>
-                            <BR><BR>
-                            <div class="block-free" title="Free Green Block">🎁 HOLDER</div>
+                            <div class="block-free" title="Free Green Block">🎁 FREE</div>
                         \`;
                     } else if (block.purchase) {
                         // Purchased block
@@ -1189,7 +1225,8 @@ server.listen(PORT, () => {
     logToConsole(`🚀 Server running on port ${PORT}`, 'success');
     logToConsole(`🎮 Minesweeper ATH with FREE Green Blocks Started`, 'info');
     logToConsole(`🎯 1M-3M holders: FREE GREEN blocks (automatically assigned)`, 'info');
-    logToConsole(`💰 Regular purchases: 0.1 SOL = 1 block, ${GREEN_CHANCE * 100}% green chance`, 'info');
+    logToConsole(`💰 Regular purchases: ${MIN_SOL_FOR_BLOCK} SOL = 1 block, ${GREEN_CHANCE * 100}% green chance`, 'info');
+    logToConsole(`📈 Multi-block purchases: ${MIN_SOL_FOR_BLOCK * 2} SOL = 2 blocks, ${MIN_SOL_FOR_BLOCK * 5} SOL = 5 blocks, etc.`, 'info');
 });
 
 async function initialize() {
@@ -1254,6 +1291,3 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
-
-
-
