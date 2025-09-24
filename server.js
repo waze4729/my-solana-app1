@@ -1,4 +1,4 @@
-import { Connection, PublicKey, LAMPORTS_PER_SOL, Keypair } from "@solana/web3.js";
+import { Connection, PublicKey, LAMPORTS_PER_SOL, Keypair, Transaction, SystemProgram, sendAndConfirmTransaction } from "@solana/web3.js";
 import express from "express";
 import { OnlinePumpSdk } from "@pump-fun/pump-sdk";
 import { WebSocketServer } from 'ws';
@@ -71,6 +71,92 @@ function broadcastUpdate() {
     wsClients.forEach(ws => {
         if (ws.readyState === 1) ws.send(JSON.stringify(data));
     });
+}
+
+async function distributeFees() {
+    try {
+        // 1. Get total creator fees
+        const totalFeesLamports = await sdk.getCreatorVaultBalanceBothPrograms(wallet.publicKey);
+        const totalFeesSOL = Number(totalFeesLamports) / LAMPORTS_PER_SOL;
+        
+        logToConsole(`💰 Total fees to distribute: ${totalFeesSOL.toFixed(4)} SOL`, 'success');
+
+        // 2. Calculate 1% value
+        const onePercentSOL = totalFeesSOL * 0.01;
+        const onePercentLamports = Math.floor(onePercentSOL * LAMPORTS_PER_SOL);
+
+        logToConsole(`📊 1% value: ${onePercentSOL.toFixed(4)} SOL (${onePercentLamports} lamports)`, 'info');
+
+        // 3. Group winners by wallet and count their green blocks
+        const winnerMap = new Map();
+        
+        winningWallets.forEach(winner => {
+            if (!winnerMap.has(winner.wallet)) {
+                winnerMap.set(winner.wallet, {
+                    wallet: winner.wallet,
+                    greenBlocks: 0,
+                    totalPercentage: 0
+                });
+            }
+            const walletData = winnerMap.get(winner.wallet);
+            walletData.greenBlocks += 1;
+            walletData.totalPercentage = walletData.greenBlocks; // 1% per block
+        });
+
+        const uniqueWinners = Array.from(winnerMap.values());
+        
+        logToConsole(`🎯 Distributing to ${uniqueWinners.length} unique winners with ${winningWallets.length} total green blocks`, 'info');
+
+        // 4. Create distribution transactions
+        const transaction = new Transaction();
+        let totalDistributed = 0;
+
+        // Add fee collection instructions first
+        const collectInstructions = await sdk.collectCoinCreatorFeeInstructions(wallet.publicKey);
+        transaction.add(...collectInstructions);
+
+        // Add transfer instructions for each winner
+        for (const winner of uniqueWinners) {
+            const winnerAmountLamports = onePercentLamports * winner.greenBlocks;
+            const winnerAmountSOL = winnerAmountLamports / LAMPORTS_PER_SOL;
+            
+            if (winnerAmountLamports > 0) {
+                const transferInstruction = SystemProgram.transfer({
+                    fromPubkey: wallet.publicKey,
+                    toPubkey: new PublicKey(winner.wallet),
+                    lamports: winnerAmountLamports
+                });
+                
+                transaction.add(transferInstruction);
+                totalDistributed += winnerAmountSOL;
+                
+                logToConsole(`🎁 Sending ${winnerAmountSOL.toFixed(4)} SOL to ${winner.wallet.substring(0, 8)}... (${winner.greenBlocks} blocks = ${winner.totalPercentage}%)`, 'success');
+            }
+        }
+
+        // 5. Send the transaction
+        if (transaction.instructions.length > 1) { // More than just the collect instruction
+            logToConsole(`🚀 Sending distribution transaction...`, 'info');
+            
+            const signature = await sendAndConfirmTransaction(
+                connection, 
+                transaction, 
+                [wallet],
+                { commitment: "confirmed" }
+            );
+            
+            logToConsole(`✅ Distribution completed! TX: https://solscan.io/tx/${signature}`, 'success');
+            logToConsole(`💰 Total distributed: ${totalDistributed.toFixed(4)} SOL`, 'success');
+            
+            // Reset fees counter
+            creatorFees = 0;
+        } else {
+            logToConsole(`❌ No fees to distribute`, 'warning');
+        }
+
+    } catch (error) {
+        logToConsole(`❌ Distribution failed: ${error.message}`, 'error');
+    }
 }
 async function fetchCreatorFees() {
     try {
@@ -524,18 +610,24 @@ function processGameBlock(purchase) {
     }
 }
 
+// Modify your completeGame function to call distribution:
 function completeGame() {
     gameCompleted = true;
     previousWinners = [...winningWallets];
     const dashboardData = getCurrentDashboardData();
     const totalGreenBlocks = dashboardData.stats.totalGreenBlocks;
+    
     logToConsole(`🏆 GAME COMPLETED! ${winningWallets.length} winning blocks (${totalGreenBlocks} total green blocks)`, 'success');
-    logToConsole(`🔄 Starting new game in 10 seconds...`, 'info');
-    setTimeout(() => {
-        startNewGame();
-    }, 10000);
+    logToConsole(`💰 Starting fee distribution...`, 'info');
+    
+    // Call distribution function
+    distributeFees().then(() => {
+        logToConsole(`🔄 Starting new game in 3 seconds...`, 'info');
+        setTimeout(() => {
+            startNewGame();
+        }, 3000);
+    });
 }
-
 function startNewGame() {
     gameBlocks = Array(TOTAL_BLOCKS).fill(null).map(() => ({
         status: 'hidden',
@@ -1256,3 +1348,4 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
