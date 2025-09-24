@@ -2,8 +2,6 @@ import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import express from "express";
 import { WebSocketServer } from 'ws';
 import http from 'http';
-import 'dotenv/config';
-
 console.log("Wallet from env:", process.env.WALLET_SECRET_KEY);
 const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
 const TOKEN_MINT = "4xVsawMYeSK7dPo9acp62bDFaDmrsCrSVXmEEBZrpump";
@@ -1208,6 +1206,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
