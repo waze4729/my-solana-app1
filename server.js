@@ -686,7 +686,7 @@ app.get("/", (req, res) => {
     <title>BWANANA.FUN</title>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
- <style>
+<style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap');
 * { 
     margin: 0; 
@@ -807,14 +807,14 @@ body {
     background: rgba(255, 0, 255, 0.02);
     border-radius: 8px;
     justify-content: center;
-
+    max-width: fit-content;
     margin-left: auto;
     margin-right: auto;
 }
 
 .block {
-    width: 47px;
-    height: 47px;
+    width: 128px;
+    height: 128px;
     border: 2px solid #333;
     display: flex;
     align-items: center;
@@ -1239,12 +1239,278 @@ body {
     }
     
     .block {
-        width: 47px;
-        height: 47px;
+        width: 110px;
+        height: 110px;
     }
     
     .block-number {
         font-size: 24px;
+    }
+}.main-content {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin: 20px 0;
+}
+
+.panels-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 15px;
+    margin: 0 auto;
+    width: 100%;
+    max-width: 1200px;
+}
+
+.holders-section,
+.winners-section,
+.previous-winners-section {
+    display: block !important; /* Override inline display:none */
+    margin: 0;
+    padding: 15px;
+    border: 1px solid;
+    background: rgba(255, 255, 0, 0.03);
+    border-radius: 8px;
+    min-height: 200px;
+    max-height: 300px;
+    overflow: hidden;
+}
+
+.holders-section {
+    border-color: #ff00ff;
+    background: rgba(255, 0, 255, 0.03);
+}
+
+.winners-section {
+    border-color: #ffff00;
+    background: rgba(255, 255, 0, 0.03);
+}
+
+.previous-winners-section {
+    border-color: #00ffff;
+    background: rgba(0, 255, 255, 0.03);
+}
+
+.holders-title,
+.winners-title,
+.previous-winners-title {
+    color: inherit;
+    font-weight: 700;
+    margin-bottom: 12px;
+    text-align: center;
+    font-size: 14px;
+    text-shadow: 0 0 8px currentColor;
+}
+
+.holders-list,
+.winner-list {
+    max-height: 220px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.minesweeper-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 128px);
+    grid-auto-rows: 128px;
+    gap: 8px;
+    margin: 0 auto;
+    padding: 20px;
+    border: 1px solid #ff00ff;
+    background: rgba(255, 0, 255, 0.02);
+    border-radius: 8px;
+    justify-content: center;
+    max-width: fit-content;
+}
+
+.console-section {
+    background: #000;
+    border: 1px solid #00ff41;
+    height: 180px;
+    overflow-y: auto;
+    margin: 0;
+    padding: 8px;
+    font-size: 9px;
+    border-radius: 6px;
+    box-shadow: inset 0 0 20px #00000080;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+    .panels-container {
+        grid-template-columns: 1fr;
+        max-width: 800px;
+    }
+}
+
+@media (max-width: 768px) {
+    .minesweeper-grid {
+        grid-template-columns: repeat(2, 128px);
+        gap: 6px;
+        padding: 10px;
+    }
+    
+    .panels-container {
+        gap: 10px;
+    }
+    
+    .holders-section,
+    .winners-section,
+    .previous-winners-section {
+        min-height: 180px;
+        max-height: 250px;
+        padding: 10px;
+    }
+}
+
+@media (max-width: 480px) {
+    .minesweeper-grid {
+        grid-template-columns: repeat(2, 110px);
+        grid-auto-rows: 110px;
+    }
+    
+    .panels-container {
+        grid-template-columns: 1fr;
+    }
+}.main-content {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 20px;
+    margin: 20px 0;
+    align-items: start;
+}
+
+.minesweeper-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 128px);
+    grid-auto-rows: 128px;
+    gap: 8px;
+    padding: 20px;
+    border: 1px solid #ff00ff;
+    background: rgba(255, 0, 255, 0.02);
+    border-radius: 8px;
+    justify-content: center;
+}
+
+.right-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    height: 100%;
+}
+
+.panels-container {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 15px;
+    flex: 1;
+}
+
+.holders-section,
+.winners-section,
+.previous-winners-section {
+    display: block !important;
+    margin: 0;
+    padding: 15px;
+    border: 1px solid;
+    background: rgba(255, 255, 0, 0.03);
+    border-radius: 8px;
+    min-height: 150px;
+    max-height: 200px;
+    overflow: hidden;
+}
+
+.holders-section {
+    border-color: #ff00ff;
+    background: rgba(255, 0, 255, 0.03);
+}
+
+.winners-section {
+    border-color: #ffff00;
+    background: rgba(255, 255, 0, 0.03);
+}
+
+.previous-winners-section {
+    border-color: #00ffff;
+    background: rgba(0, 255, 255, 0.03);
+}
+
+.holders-title,
+.winners-title,
+.previous-winners-title {
+    color: inherit;
+    font-weight: 700;
+    margin-bottom: 10px;
+    text-align: center;
+    font-size: 14px;
+    text-shadow: 0 0 8px currentColor;
+}
+
+.holders-list,
+.winner-list {
+    max-height: 140px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.console-section {
+    background: #000;
+    border: 1px solid #00ff41;
+    height: 200px;
+    overflow-y: auto;
+    margin: 0;
+    padding: 10px;
+    font-size: 10px;
+    border-radius: 6px;
+    box-shadow: inset 0 0 20px #00000080;
+    flex-shrink: 0;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+    .main-content {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    
+    .minesweeper-grid {
+        justify-self: center;
+    }
+    
+    .right-panel {
+        order: -1;
+    }
+}
+
+@media (max-width: 768px) {
+    .minesweeper-grid {
+        grid-template-columns: repeat(2, 128px);
+        gap: 6px;
+        padding: 15px;
+    }
+    
+    .holders-section,
+    .winners-section,
+    .previous-winners-section {
+        min-height: 120px;
+        max-height: 180px;
+        padding: 10px;
+    }
+    
+    .holders-list,
+    .winner-list {
+        max-height: 110px;
+    }
+}
+
+@media (max-width: 480px) {
+    .minesweeper-grid {
+        grid-template-columns: repeat(2, 110px);
+        grid-auto-rows: 110px;
     }
 }
 </style>
@@ -1290,29 +1556,32 @@ body {
                 <div class="stat-value" id="total-occupied">0</div>
             </div>
         </div>
-        <div class="minesweeper-grid" id="minesweeper-grid"></div>
-        
-        <div class="holders-section" id="holders-section" style="display: none;">
-            <div class="holders-title">🏦 1% HOLDERS BLOCKS 🏦</div>
-            <div class="holders-list" id="holders-list"></div>
+<div class="main-content">
+    <div class="minesweeper-grid" id="minesweeper-grid"></div>
+    
+    <div class="right-panel">
+        <div class="panels-container">
+            <div class="holders-section" id="holders-section">
+                <div class="holders-title">🏦 1% HOLDERS BLOCKS 🏦</div>
+                <div class="holders-list" id="holders-list"></div>
+            </div>
+            
+            <div class="winners-section" id="winners-section">
+                <div class="winners-title">🏆 CURRENT ROUND BUYERS 🏆</div>
+                <div class="winner-list" id="winner-list"></div>
+            </div>
+            
+            <div class="previous-winners-section" id="previous-winners-section">
+                <div class="previous-winners-title">📋 PREVIOUS ROUND WINNERS 📋</div>
+                <div class="winner-list" id="previous-winner-list"></div>
+            </div>
         </div>
-        
-        <div class="winners-section" id="winners-section" style="display: none;">
-            <div class="winners-title">🏆 CURRENT ROUND BUYERS 🏆</div>
-            <div class="winner-list" id="winner-list"></div>
-        </div>
-        
-        <div class="previous-winners-section" id="previous-winners-section" style="display: none;">
-            <div class="previous-winners-title">📋 PREVIOUS ROUND WINNERS 📋</div>
-            <div class="winner-list" id="previous-winner-list"></div>
-        </div>
-        
-
         
         <div class="console-section" id="console-output">
             <div class="console-line console-info">Initializing Game System...</div>
         </div>
     </div>
+</div>
 
     <script>
         let ws;
