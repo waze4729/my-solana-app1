@@ -3,8 +3,7 @@ import express from "express";
 import { OnlinePumpSdk } from "@pump-fun/pump-sdk";
 import { WebSocketServer } from 'ws';
 import http from 'http';
-const RPC_ENDPOINT = [
-    "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a"];
+const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
 
 const TOKEN_MINT = "4xVsawMYeSK7dPo9acp62bDFaDmrsCrSVXmEEBZrpump";
 const POLL_INTERVAL_MS = 2500;
@@ -1357,6 +1356,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
