@@ -1148,7 +1148,6 @@ server.listen(PORT, () => {
     logToConsole(`🎯 1M-3M holders: FREE GREEN blocks (automatically assigned)`, 'info');
     logToConsole(`💰 Regular purchases: 0.1 SOL = 1 block, ${GREEN_CHANCE * 100}% green chance`, 'info');
 });
-
 async function initialize() {
     try {
         logToConsole(`📊 Initializing token data...`, 'info');
@@ -1157,7 +1156,7 @@ async function initialize() {
         logToConsole(`✅ Token data initialized`, 'success');
         const assigned = assignFreeGreenBlocks();
         if (assigned > 0) {
-            logToConsole(`🎯 Assigned ${assigned} FREE green blocks for 1M-3M holders`, 'success');
+            logToConsole(`🎯 Assigned ${assigned} green blocks for 1% HOLDERS`, 'success');
         }
     } catch (e) {
         logToConsole(`Error initializing: ${e.message}`, 'error');
@@ -1165,9 +1164,11 @@ async function initialize() {
 }
 
 let tick = 0;
- function mainLoop() {
-    await initialize();
+
+async function mainLoop() {  // <-- made async
+    await initialize();      // now valid
     let holderCheckCounter = 0;
+
     while (true) {
         try {
             if (holderCheckCounter % 5 === 0) {
@@ -1179,25 +1180,34 @@ let tick = 0;
                 }
                 holderCheckCounter = 0;
             }
+
             if (holderCheckCounter % 2 === 0) {
                 await fetchTokenPrice();
             }
+
             const newPurchase = await monitorNewTokenTransactions();
             if (newPurchase) {
                 for (const purchase of newPurchase) {
                     processGameBlock(purchase);
                 }
             }
+
             holderCheckCounter++;
         } catch (e) {
+            logToConsole(`Error in main loop: ${e.message}`, 'error');
         }
+
         await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
     }
 }
+
+// Start the loop
 mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
+
 
 
 
