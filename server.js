@@ -483,47 +483,35 @@ function calculateSolSpent(tx) {
 async function monitorNewTokenTransactions() {
     try {
         const mintPublicKey = new PublicKey(TOKEN_MINT);
-        const largestAccounts = await connection.getTokenLargestAccounts(mintPublicKey);
+        
+        // Check recent transactions for the token mint (real-time purchases)
+        const recentSignatures = await connection.getSignaturesForAddress(
+            mintPublicKey, 
+            { limit: 10 } // Check last 10 transactions
+        );
         
         let purchases = [];
-        const batchPromises = [];
-        const accountsToProcess = [];
 
-        // First pass: filter accounts that need processing
-        for (const acct of largestAccounts.value) {
-            const tokenAccountPubkey = acct.address;
-            const tokenAccountKey = tokenAccountPubkey.toBase58();
+        // Process each transaction one by one
+        for (const sigInfo of recentSignatures) {
+            const signature = sigInfo.signature;
             
-            // Skip if already processed or doesn't meet minimum threshold
-            if (processedTransactions.has(tokenAccountKey) || 
-                acct.uiAmount < MIN_TOKENS_FOR_GUARANTEED_GREEN) {
-                continue;
-            }
-
-            accountsToProcess.push({ acct, tokenAccountKey });
-        }
-
-        // Process accounts in batches of 5 to avoid rate limiting
-        const BATCH_SIZE = 5;
-        for (let i = 0; i < accountsToProcess.length; i += BATCH_SIZE) {
-            const batch = accountsToProcess.slice(i, i + BATCH_SIZE);
-            const batchPromises = batch.map(({ acct, tokenAccountKey }) => 
-                processAccountBatch(acct.address, acct.uiAmount, tokenAccountKey)
-            );
-
-            // Wait for batch to complete
-            const batchResults = await Promise.allSettled(batchPromises);
+            // Skip if already processed
+            if (processedTransactions.has(signature)) continue;
             
-            for (const result of batchResults) {
-                if (result.status === 'fulfilled' && result.value) {
-                    purchases.push(result.value);
-                }
-            }
+            const tx = await getTransactionDetails(signature);
+            if (!tx) continue;
 
-            // Add delay between batches to avoid rate limiting
-            if (i + BATCH_SIZE < accountsToProcess.length) {
-                await new Promise(r => setTimeout(r, 1000)); // 1 second delay
+            // Analyze if this is a purchase transaction
+            const purchase = await analyzeTokenPurchase(tx, signature);
+            if (purchase) {
+                purchases.push(purchase);
+                processedTransactions.add(signature);
+                logToConsole(`🛒 NEW PURCHASE: ${purchase.wallet.substring(0, 8)}... spent ${purchase.solAmount.toFixed(4)} SOL`, 'success');
             }
+            
+            // Small delay between processing transactions
+            await new Promise(r => setTimeout(r, 500));
         }
 
         return purchases.length > 0 ? purchases : null;
@@ -531,8 +519,33 @@ async function monitorNewTokenTransactions() {
         logToConsole(`Error in monitorNewTokenTransactions: ${e.message}`, 'error');
         return null;
     }
-}
+}async function analyzeTokenPurchase(tx, signature) {
+    try {
+        if (!tx?.transaction || !tx.meta) return null;
 
+        const { solSpent, buyer } = calculateSolSpent(tx);
+        
+        // Only consider purchases of 0.1 SOL or more (block purchases)
+        if (solSpent < 0.09 || !buyer) return null;
+
+        // Check if buyer is a major holder
+        const isMillionTokenHolder = majorHolders.has(buyer) && 
+                                   majorHolders.get(buyer).tokens >= MIN_TOKENS_FOR_GUARANTEED_GREEN;
+
+        return {
+            wallet: buyer,
+            signature: signature,
+            timestamp: new Date().toISOString(),
+            txTime: Date.now(),
+            solAmount: solSpent,
+            isMillionTokenHolder: isMillionTokenHolder,
+            holderTokens: isMillionTokenHolder ? majorHolders.get(buyer).tokens : 0
+        };
+
+    } catch (e) {
+        return null;
+    }
+}
 // Process individual account in batch
 async function processAccountBatch(tokenAccountPubkey, tokenAmount, tokenAccountKey) {
     try {
@@ -1358,6 +1371,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
