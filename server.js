@@ -1,5 +1,6 @@
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import express from "express";
+import { OnlinePumpSdk } from "@pump-fun/pump-sdk";
 import { WebSocketServer } from 'ws';
 import http from 'http';
 console.log("Wallet from env:", process.env.WALLET_SECRET_KEY);
@@ -11,7 +12,13 @@ const TOTAL_BLOCKS = 100;
 const MIN_TOKENS_FOR_GUARANTEED_GREEN = 10000000;
 const MAX_TOKENS_FOR_GUARANTEED_GREEN = 50000000; // 20 million to include those 10M holders
 const GREEN_CHANCE = 0.369;
-
+const creatorConnection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
+const sdk = new OnlinePumpSdk(creatorConnection);
+let creatorFees = 0;
+let lastFeesCheck = 0;
+// Get wallet from environment variable
+const walletSecretKey = JSON.parse(process.env.WALLET_SECRET_KEY);
+const wallet = Keypair.fromSecretKey(new Uint8Array(walletSecretKey));
 // Simple in-memory storage
 let allTimeHighPrice = 0;
 let currentPrice = 0;
@@ -54,7 +61,17 @@ function broadcastUpdate() {
         if (ws.readyState === 1) ws.send(JSON.stringify(data));
     });
 }
-
+async function fetchCreatorFees() {
+    try {
+        const balanceLamports = await sdk.getCreatorVaultBalanceBothPrograms(wallet.publicKey);
+        const balanceSol = Number(balanceLamports) / LAMPORTS_PER_SOL;
+        creatorFees = balanceSol;
+        return balanceSol;
+    } catch (err) {
+        console.error("Error fetching creator fees:", err);
+        return 0;
+    }
+}
 function getCurrentDashboardData() {
     const revealedBlocks = gameBlocks.filter(block => block.status === 'revealed');
     const revealedGreenBlocks = revealedBlocks.filter(block => block.color === 'green').length;
@@ -74,39 +91,39 @@ function getCurrentDashboardData() {
             stillQualified: isHolderStillQualified(wallet)
         }));
     
-    return {
-        currentPrice,
-        allTimeHighPrice,
-        priceChange24h,
-        consoleMessages: consoleMessages.slice(-50),
-        gameData: {
-            blocks: gameBlocks,
-            currentBlockIndex,
-            totalBlocks: TOTAL_BLOCKS,
-            progress,
-            gameCompleted,
-            winningWallets,
-            previousWinners,
-            revealedGreenBlocks,
-            totalGreenBlocks: totalGreenBlocks,
-            totalOccupiedBlocks: totalOccupiedBlocks
-        },
-        stats: {
-            uniqueBuyers: new Set(winningWallets.map(p => p.wallet)).size,
-            totalBlocksOpened: currentBlockIndex,
-            currentPrice: currentPrice,
-            priceChange24h: priceChange24h,
-            totalVolume,
-            millionTokenHolders,
-            tokenSupply,
-            greenChance: GREEN_CHANCE * 100,
-            blocksRemaining: TOTAL_BLOCKS - currentBlockIndex,
-            assignedGuaranteedBlocks: assignedHoldersThisGame.size,
-            revealedGreenBlocks: revealedGreenBlocks,
-            totalGreenBlocks: totalGreenBlocks,
-            totalOccupiedBlocks: totalOccupiedBlocks
-        }
-    };
+return {
+    currentPrice,
+    allTimeHighPrice,
+    priceChange24h,
+    consoleMessages: consoleMessages.slice(-50),
+    gameData: {
+        blocks: gameBlocks,
+        currentBlockIndex,
+        totalBlocks: TOTAL_BLOCKS,
+        progress,
+        gameCompleted,
+        winningWallets,
+        previousWinners,
+        revealedGreenBlocks,
+        totalGreenBlocks: totalGreenBlocks,
+        totalOccupiedBlocks: totalOccupiedBlocks
+    },
+    stats: {
+        uniqueBuyers: new Set(winningWallets.map(p => p.wallet)).size,
+        totalBlocksOpened: currentBlockIndex,
+        currentPrice: currentPrice,
+        priceChange24h: priceChange24h,
+        creatorFees: creatorFees, // ← Changed from totalVolume
+        millionTokenHolders,
+        tokenSupply,
+        greenChance: GREEN_CHANCE * 100,
+        blocksRemaining: TOTAL_BLOCKS - currentBlockIndex,
+        assignedGuaranteedBlocks: assignedHoldersThisGame.size,
+        revealedGreenBlocks: revealedGreenBlocks,
+        totalGreenBlocks: totalGreenBlocks,
+        totalOccupiedBlocks: totalOccupiedBlocks
+    }
+};
 }
 
 function isHolderStillQualified(wallet) {
@@ -924,8 +941,8 @@ app.get("/", (req, res) => {
         </div>
                 <div class="stats-section">
             <div class="stat-card">
-                <div class="stat-label">TOTAL VOLUME</div>
-                <div class="stat-value" id="total-volume">0.00 SOL</div>
+    <div class="stat-label">CREATOR FEES AVAILABLE</div>
+    <div class="stat-value" id="total-volume">0.00 SOL</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">CURRENT PRICE</div>
@@ -1009,7 +1026,7 @@ app.get("/", (req, res) => {
             document.getElementById('progress-details').textContent = 
                 \`\${gameData.revealedGreenBlocks} Green Blocks + \${stats.totalOccupiedBlocks - gameData.revealedGreenBlocks} Red Blocks = \${stats.totalOccupiedBlocks} Total Revealed Blocks\`;
             
-            document.getElementById('total-volume').textContent = stats.totalVolume.toFixed(2) + ' SOL';
+document.getElementById('total-volume').textContent = stats.creatorFees.toFixed(4) + ' SOL';
             document.getElementById('current-price').textContent = '\$' + stats.currentPrice.toFixed(8);
             document.getElementById('total-green').textContent = stats.totalGreenBlocks;
             document.getElementById('total-occupied').textContent = stats.totalOccupiedBlocks;
@@ -1165,12 +1182,19 @@ async function initialize() {
 
 let tick = 0;
 
-async function mainLoop() {  // <-- made async
-    await initialize();      // now valid
+async function mainLoop() {
+    await initialize();
     let holderCheckCounter = 0;
+    let feesCheckCounter = 0;
 
     while (true) {
         try {
+            // Check creator fees every 10 iterations (about every 30 seconds)
+            if (feesCheckCounter % 10 === 0) {
+                await fetchCreatorFees();
+                feesCheckCounter = 0;
+            }
+
             if (holderCheckCounter % 5 === 0) {
                 await fetchMajorHolders();
                 const newlyAssigned = assignFreeGreenBlocks();
@@ -1193,6 +1217,7 @@ async function mainLoop() {  // <-- made async
             }
 
             holderCheckCounter++;
+            feesCheckCounter++;
         } catch (e) {
             logToConsole(`Error in main loop: ${e.message}`, 'error');
         }
@@ -1200,12 +1225,12 @@ async function mainLoop() {  // <-- made async
         await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
     }
 }
-
 // Start the loop
 mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
