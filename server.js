@@ -157,46 +157,41 @@ async function fetchTokenSupply() {
 async function fetchMajorHolders() {
     try {
         const mintPublicKey = new PublicKey(TOKEN_MINT);
-        const largestAccounts = await connection.getTokenLargestAccounts(mintPublicKey);
+        const tokenProgramId = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
         
-        if (!largestAccounts || !largestAccounts.value) {
-            return new Map();
-        }
+        // Get all token accounts for the mint
+        const accounts = await connection.getParsedProgramAccounts(
+            tokenProgramId,
+            {
+                filters: [
+                    { dataSize: 165 }, // SPL Token Account size
+                    { memcmp: { offset: 0, bytes: mintPublicKey.toBase58() } } // Mint address at offset 0
+                ]
+            }
+        );
         
         const holders = new Map();
-        
-        for (const account of largestAccounts.value) {
-            try {
-                const accountInfo = await connection.getAccountInfo(account.address);
-                if (!accountInfo) continue;
-                
-                if (accountInfo.data.length >= 64) {
-                    const ownerPubkey = new PublicKey(accountInfo.data.subarray(32, 64));
-                    const owner = ownerPubkey.toString();
-                    
-                    const balanceInfo = await connection.getTokenAccountBalance(account.address);
-                    if (balanceInfo && balanceInfo.value) {
-                        const tokens = balanceInfo.value.uiAmount || 0;
-                        const percentage = tokenSupply > 0 ? (tokens / tokenSupply) * 100 : 0;
-                        
-                        holders.set(owner, {
-                            tokens: tokens,
-                            percentage: percentage,
-                            account: account.address.toString(),
-                            lastUpdated: Date.now()
-                        });
-                    }
-                }
-            } catch (e) {
-                // Silent error for individual account failures
+        for (const acc of accounts) {
+            const info = acc.account.data.parsed.info;
+            const tokens = Number(info.tokenAmount.uiAmount || 0);
+            const owner = info.owner;
+            const percentage = tokenSupply > 0 ? (tokens / tokenSupply) * 100 : 0;
+
+            // Only add if balance > 0
+            if (tokens > 0) {
+                holders.set(owner, {
+                    tokens,
+                    percentage,
+                    account: acc.pubkey.toBase58(),
+                    lastUpdated: Date.now()
+                });
             }
-            await new Promise(r => setTimeout(r, 50));
         }
-        
+
         majorHolders = holders;
         return holders;
-        
     } catch (e) {
+        logToConsole(`Error in fetchMajorHolders: ${e.message}`, 'error');
         return new Map();
     }
 }
@@ -1254,3 +1249,4 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
