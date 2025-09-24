@@ -1037,13 +1037,15 @@ app.get("/", (req, res) => {
     
 
 
-        
-        <div class="progress-section">
-            <div class="progress-title">CURRENT ROUND BLOCKS PROGRESS  <div class="progress-text" id="progress-text">0/100 Blocks (0%)</div></div>
-            <div class="progress-bar">
-                <div class="progress-fill" id="progress-fill">           </div>
-            </div>
-
+<div class="progress-section">
+    <div class="progress-title">CURRENT ROUND BLOCKS PROGRESS</div>
+    <div style="text-align: center; color: #ffff00; margin-bottom: 10px; font-size: 14px;">
+        TOKEN: ${TOKEN_MINT}
+    </div>
+    <div class="progress-text" id="progress-text">0/100 Blocks (0%)</div>
+    <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill"></div>
+    </div>
             <div class="progress-details" id="progress-details">Loading progress details...</div><CENTER>
                             • 1% token holders: +1 GREEN block (automatically assigned every round)<br>
                 • Regular purchases: 0.1 SOL = 1 block, 0.5 SOL = 5 blocks, 0.72 SOL = 7 blocks<br>
@@ -1356,6 +1358,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
