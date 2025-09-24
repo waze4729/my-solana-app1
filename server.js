@@ -807,14 +807,14 @@ body {
     background: rgba(255, 0, 255, 0.02);
     border-radius: 8px;
     justify-content: center;
-    max-width: fit-content;
+
     margin-left: auto;
     margin-right: auto;
 }
 
 .block {
-    width: 128px;
-    height: 128px;
+    width: 47px;
+    height: 47px;
     border: 2px solid #333;
     display: flex;
     align-items: center;
@@ -1239,8 +1239,8 @@ body {
     }
     
     .block {
-        width: 110px;
-        height: 110px;
+        width: 47px;
+        height: 47px;
     }
     
     .block-number {
@@ -1578,6 +1578,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
