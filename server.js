@@ -1263,21 +1263,7 @@ body {
 </style>
 </head>
 <body>
-    <div class="app-container">
-        <!-- HEADER -->
-        <div class="glass-card app-header">
-            <div class="brand-section">
-                <div class="brand-logo">🍌</div>
-                <div class="brand-info">
-                    <h1>BWANANA.FUN</h1>
-                    <div class="subtitle">Did you ever bought the TOP and got rewarded ? BWANANA.FUN rewards CHAD ATH BUYERS.<br>Be the wallet that bought TOP and get 50% rewards fee.<br>Not ATH levels , no problem ! HOLD 1% get 1 green block assigned every round or Buy 0.1SOL get 1 chance(50%) to get 1 green block into current round. 1 Green Block = 1% Creator FEE.</div>
-                </div>
-            </div>
-            <div class="connection-badge">
-                <div class="status-dot" id="connection-indicator"></div>
-                <span id="connection-text">CONNECTING</span>
-            </div>
-        </div>
+
 
         <!-- STATS DASHBOARD -->
         <div class="stats-dashboard">
@@ -1610,6 +1596,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
