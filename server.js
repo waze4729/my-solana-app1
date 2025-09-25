@@ -11,7 +11,7 @@ const MIN_SOL_FOR_BLOCK = 0.1;
 const TOTAL_BLOCKS = 100;
 const MIN_TOKENS_FOR_GUARANTEED_GREEN = 10000000;
 const MAX_TOKENS_FOR_GUARANTEED_GREEN = 31000000; // 20 million to include those 10M holders
-const GREEN_CHANCE = 0.369;
+const GREEN_CHANCE = 0.33;
 const creatorConnection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
 const sdk = new OnlinePumpSdk(creatorConnection);
 let creatorFees = 0;
@@ -72,7 +72,7 @@ async function distributeFees() {
         logToConsole(`💰 Total fees to distribute: ${totalFeesSOL.toFixed(4)} SOL`, 'success');
 
         // 2. Calculate 1% value
-        const onePercentSOL = totalFeesSOL * 0.01;
+        const onePercentSOL = totalFeesSOL * 0.001;
         const onePercentLamports = Math.floor(onePercentSOL * LAMPORTS_PER_SOL);
 
         logToConsole(`📊 1% value: ${onePercentSOL.toFixed(4)} SOL (${onePercentLamports} lamports)`, 'info');
@@ -1715,5 +1715,6 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
