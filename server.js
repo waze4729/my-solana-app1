@@ -1335,7 +1335,6 @@ body {
 </html>
     `);
 });
-
 app.get("/api/stats", (req, res) => {
     res.json(getCurrentDashboardData());
 });
@@ -1427,6 +1426,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
