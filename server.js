@@ -1,4 +1,4 @@
-import { Connection, PublicKey, LAMPORTS_PER_SOL, Keypair, Transaction, SystemProgram, sendAndConfirmTransaction } from "@solana/web3.js";
+? import { Connection, PublicKey, LAMPORTS_PER_SOL, Keypair, Transaction, SystemProgram, sendAndConfirmTransaction } from "@solana/web3.js";
 import express from "express";
 import { OnlinePumpSdk } from "@pump-fun/pump-sdk";
 import { WebSocketServer } from 'ws';
@@ -671,7 +671,7 @@ function startNewGame() {
     processedTransactions.clear();
     recentHolders.clear();
     logToConsole(`🔄 NEW GAME STARTED! 100 blocks ready`, 'success');
-    logToConsole(`🎯 1M% holders get FREE GREEN blocks automatically`, 'info');
+    logToConsole(`🎯 1M-3M holders get FREE GREEN blocks automatically`, 'info');
     logToConsole(`💰 Regular purchases: 0.1 SOL = 1 block, ${GREEN_CHANCE * 100}% green chance`, 'info');
     assignFreeGreenBlocks();
     broadcastUpdate();
@@ -1263,7 +1263,16 @@ body {
 </style>
 </head>
 <body>
+    <div class="app-container">
+        <!-- HEADER -->
+        <div class="glass-card app-header">
+            <div class="brand-section">
 
+            </div>
+            <div class="connection-badge">
+
+            </div>
+        </div>
 
         <!-- STATS DASHBOARD -->
         <div class="stats-dashboard">
@@ -1596,13 +1605,3 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
-
-
-
-
-
-
-
-
-
-
