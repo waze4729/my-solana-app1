@@ -5,7 +5,7 @@ import { WebSocketServer } from 'ws';
 import http from 'http';
 const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
 
-const TOKEN_MINT = "AG6PqNvjrPEA46URPPvxrCZwuZv7zVuLbvbwVBGsyoRh";
+const TOKEN_MINT = "A7rDeqLKrXkGMoLuNj9vkFvWzeu6c88X2LrUYzZ8pump";
 const POLL_INTERVAL_MS = 2500;
 const MIN_SOL_FOR_BLOCK = 0.1;
 const TOTAL_BLOCKS = 100;
@@ -681,7 +681,7 @@ function startNewGame() {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>BWANANA.FUN</title>
+    <title>BWANANA.FUN 🍌🍌🍌</title>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <style>
@@ -1602,6 +1602,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
