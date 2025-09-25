@@ -837,8 +837,7 @@ body {
     border: 1px solid;
     background: rgba(255, 255, 255, 0.03);
     border-radius: 5px;
-    min-height: 120px;
-    max-height: 200px;
+
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -1117,7 +1116,7 @@ body {
                 <div class="progress-bar-compact">
                     <div class="progress-fill-compact" id="progress-fill"></div>
                 </div>
-                <div class="progress-text" id="progress-details">0 Green + 0 Red = 0 Total</div>
+
             </div>
             <div class="connection-status">
                 <span id="connection-indicator">●</span>
@@ -1153,28 +1152,24 @@ body {
             <!-- RIGHT PANEL -->
             <div class="right-panel">
                 <div class="panels-container">
-                    <!-- HOLDERS PANEL -->
-                    <div class="panel holders-panel">
+
                         <div class="panel-title">🏦 1% HOLDERS</div>
                         <div class="panel-list" id="holders-list"></div>
-                    </div>
+        
                     
-                    <!-- WINNERS PANEL -->
-                    <div class="panel winners-panel">
+
                         <div class="panel-title">🏆 CURRENT BUYERS</div>
                         <div class="panel-list" id="winner-list"></div>
-                    </div>
-                    
-                    <!-- PREVIOUS WINNERS PANEL -->
-                    <div class="panel previous-winners-panel">
+            
+
                         <div class="panel-title">📋 PREVIOUS WINNERS</div>
                         <div class="panel-list" id="previous-winner-list"></div>
-                    </div>
+
                 </div>
                 
                 <!-- CONSOLE -->
                 <div class="console-compact" id="console-output">
-                    <div class="console-line console-info">Initializing Game System...</div>
+
                 </div>
             </div>
         </div>
@@ -1432,6 +1427,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
