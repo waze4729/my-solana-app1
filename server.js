@@ -671,7 +671,7 @@ function startNewGame() {
     processedTransactions.clear();
     recentHolders.clear();
     logToConsole(`🔄 NEW GAME STARTED! 100 blocks ready`, 'success');
-    logToConsole(`🎯 1M-3M holders get FREE GREEN blocks automatically`, 'info');
+    logToConsole(`🎯 1M% holders get FREE GREEN blocks automatically`, 'info');
     logToConsole(`💰 Regular purchases: 0.1 SOL = 1 block, ${GREEN_CHANCE * 100}% green chance`, 'info');
     assignFreeGreenBlocks();
     broadcastUpdate();
@@ -1270,7 +1270,7 @@ body {
                 <div class="brand-logo">🍌</div>
                 <div class="brand-info">
                     <h1>BWANANA.FUN</h1>
-                    <div class="subtitle">Solana Block Game • Live Trading</div>
+                    <div class="subtitle">Did you ever bought the TOP and got rewarded ? BWANANA.FUN rewards CHAD ATH BUYERS.<br>Be the wallet that bought TOP and get 50% rewards fee.<br>Not ATH levels , no problem ! HOLD 1% get 1 green block assigned every round or Buy 0.1SOL get 1 chance(50%) to get 1 green block into current round. 1 Green Block = 1% Creator FEE.</div>
                 </div>
             </div>
             <div class="connection-badge">
@@ -1339,6 +1339,13 @@ body {
 
             <!-- SIDEBAR -->
             <div class="sidebar">
+                <div class="activity-feed">
+                    <div class="feed-header">
+                        <div class="panel-icon" style="background: var(--neon-blue);">📡</div>
+                        <div class="panel-title">Live Activity</div>
+                    </div>
+                    <div class="feed-content" id="console-output"></div>
+                </div>
                 <div class="info-panel">
                     <div class="panel-header">
                         <div class="panel-icon" style="background: var(--neon-purple);">🏦</div>
@@ -1355,13 +1362,7 @@ body {
                     <div class="panel-content" id="winner-list"></div>
                 </div>
 
-                <div class="activity-feed">
-                    <div class="feed-header">
-                        <div class="panel-icon" style="background: var(--neon-blue);">📡</div>
-                        <div class="panel-title">Live Activity</div>
-                    </div>
-                    <div class="feed-content" id="console-output"></div>
-                </div>
+
             </div>
         </div>
     </div>
@@ -1609,6 +1610,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
