@@ -675,8 +675,7 @@ function startNewGame() {
     logToConsole(`💰 Regular purchases: 0.1 SOL = 1 block, ${GREEN_CHANCE * 100}% green chance`, 'info');
     assignFreeGreenBlocks();
     broadcastUpdate();
-}
-app.get("/", (req, res) => {
+}app.get("/", (req, res) => {
     res.setHeader("Content-Type", "text/html");
     res.end(`
 <!DOCTYPE html>
@@ -686,490 +685,675 @@ app.get("/", (req, res) => {
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
+:root {
+    --neon-purple: #c084fc;
+    --neon-blue: #60a5fa;
+    --neon-green: #4ade80;
+    --neon-pink: #f472b6;
+    --neon-orange: #fb923c;
+    --dark-bg: #0a0a0f;
+    --card-bg: #1a1a2e;
+    --border-glow: #2d2d44;
+    --text-primary: #e2e8f0;
+    --text-secondary: #94a3b8;
+    --glass-bg: rgba(255, 255, 255, 0.03);
+    --success-color: #10b981;
+    --danger-color: #ef4444;
+}
+
 * { 
     margin: 0; 
     padding: 0; 
     box-sizing: border-box; 
 }
+
 body {
-    background: #000;
-    color: #00ff41;
-    font-family: 'JetBrains Mono', monospace;
+    background: var(--dark-bg);
+    background-image: 
+        radial-gradient(circle at 20% 50%, rgba(192, 132, 252, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(96, 165, 250, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 40% 80%, rgba(74, 222, 128, 0.1) 0%, transparent 50%);
+    color: var(--text-primary);
+    font-family: 'Space Grotesk', sans-serif;
     min-height: 100vh;
-    overflow-x: hidden;
-    font-size: 12px;
-    line-height: 1.2;
+    font-size: 14px;
+    line-height: 1.4;
 }
 
-/* COMPACT LAYOUT */
-.compact-container {
-    padding: 8px;
-    max-width: 100%;
+.app-container {
+    max-width: 1600px;
     margin: 0 auto;
-}
-
-/* HEADER SECTION */
-.stream-header {
+    padding: 20px;
     display: grid;
-    grid-template-columns: auto 1fr auto;
-    gap: 15px;
-    align-items: center;
-    margin-bottom: 10px;
-    padding: 8px;
-    background: rgba(0, 255, 65, 0.05);
-    border: 1px solid #00ff41;
-    border-radius: 6px;
+    grid-template-rows: auto auto 1fr;
+    gap: 20px;
+    min-height: 100vh;
 }
 
-.game-title {
-    color: #ffff00;
-    font-size: 16px;
-    font-weight: 800;
-    text-shadow: 0 0 10px #ffff00;
-    white-space: nowrap;
+/* GLASS EFFECT */
+.glass-card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--border-glow);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
-.connection-status {
+/* HEADER */
+.app-header {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 8px;
-    background: rgba(0, 0, 0, 0.9);
-    border: 1px solid #00ff41;
-    border-radius: 4px;
-    font-size: 10px;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 20px;
 }
 
-.status-connected { color: #00ff41; }
-.status-disconnected { color: #ff4444; }
-
-/* MAIN GRID LAYOUT */
-.main-grid {
-    display: grid;
-    grid-template-columns: 650px 1fr;
-    gap: 10px;
-    height: calc(100vh - 100px);
+.brand-section {
+    display: flex;
+    align-items: center;
+    gap: 16px;
 }
 
-/* BLOCKS GRID - SMALLER */
-.minesweeper-grid {
-    display: grid;
-    grid-template-columns: repeat(10, 60px); /* 10 columns, smaller blocks */
-    grid-auto-rows: 60px;
-    gap: 3px;
-    padding: 10px;
-    border: 1px solid #ff00ff;
-    background: rgba(255, 0, 255, 0.02);
-    border-radius: 6px;
-    justify-content: center;
-    align-content: start;
-    overflow-y: auto;
-    max-height: 100%;
-}
-
-.block {
-    width: 60px;
-    height: 60px;
-    border: 1px solid #333;
+.brand-logo {
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, var(--neon-purple), var(--neon-pink));
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
+    font-size: 24px;
     font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    background: linear-gradient(145deg, #1a1a1a, #2a2a2a);
+    color: white;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+}
+
+.brand-info h1 {
+    font-size: 24px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--neon-purple), var(--neon-blue));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 4px;
+}
+
+.brand-info .subtitle {
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 400;
+}
+
+.connection-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: var(--glass-bg);
+    border: 1px solid var(--border-glow);
+    border-radius: 24px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    animation: pulse-glow 2s infinite;
+}
+
+.status-connected { 
+    background: var(--success-color);
+    box-shadow: 0 0 8px var(--success-color);
+}
+
+.status-disconnected { 
+    background: var(--danger-color);
+    box-shadow: 0 0 8px var(--danger-color);
+}
+
+@keyframes pulse-glow {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.1); }
+}
+
+/* STATS DASHBOARD */
+.stats-dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+.stat-card {
+    background: linear-gradient(135deg, var(--card-bg), rgba(255, 255, 255, 0.05));
+    border: 1px solid var(--border-glow);
+    border-radius: 12px;
+    padding: 20px;
     position: relative;
     overflow: hidden;
-    font-size: 10px;
-    border-radius: 3px;
 }
 
-.block.hidden {
-    background: linear-gradient(145deg, #2a2a2a, #3a3a3a);
-    animation: pulse 2s ease-in-out infinite;
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--neon-purple), var(--neon-blue), var(--neon-green));
 }
 
-@keyframes pulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.02); }
-}
-
-.block.revealed.green {
-    background: linear-gradient(145deg, #00ff41, #00cc33);
-    color: #000;
-    border-color: #00ff41;
-    box-shadow: 0 0 15px #00ff41;
-    transform: scale(1.03);
-}
-
-.block.revealed.red {
-    background: linear-gradient(145deg, #ff4444, #cc3333);
-    color: #000;
-    border-color: #ff4444;
-    box-shadow: 0 0 15px #ff4444;
-    transform: scale(1.03);
-}
-
-.block-number {
-    font-size: 14px;
-    font-weight: 800;
-}
-
-/* RIGHT PANEL - COMPACT */
-.right-panel {
+.stat-header {
     display: flex;
-    flex-direction: column;
+    align-items: center;
     gap: 8px;
-    height: 100%;
+    margin-bottom: 12px;
 }
 
-/* PANELS CONTAINER - SIDE BY SIDE */
-.panels-container {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    flex: 1;
-}
-
-.panel {
-    padding: 8px;
-    border: 1px solid;
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 5px;
-
-    overflow: hidden;
+.stat-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
 }
 
-.holders-panel {
-    border-color: #ff00ff;
-    grid-column: 1;
-    grid-row: 1;
-}
-
-.winners-panel {
-    border-color: #ffff00;
-    grid-column: 2;
-    grid-row: 1;
-}
-
-.previous-winners-panel {
-    border-color: #00ffff;
-    grid-column: 1 / span 2;
-    grid-row: 2;
-    max-height: 150px;
-}
-
-.panel-title {
-    font-weight: 700;
-    margin-bottom: 6px;
-    text-align: center;
-    font-size: 11px;
-    padding: 4px;
-    border-bottom: 1px solid;
-    color: inherit;
-}
-
-.holders-panel .panel-title { color: #ff00ff; }
-.winners-panel .panel-title { color: #ffff00; }
-.previous-winners-panel .panel-title { color: #00ffff; }
-
-.panel-list {
-    flex: 1;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    font-size: 9px;
-}
-
-.list-item {
-    padding: 4px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 3px;
-    border-left: 2px solid;
-    transition: all 0.2s ease;
-}
-
-.holders-panel .list-item { border-left-color: #ff00ff; }
-.winners-panel .list-item { border-left-color: #ffff00; }
-.previous-winners-panel .list-item { border-left-color: #00ffff; }
-
-.list-item:hover {
-    transform: translateX(2px);
-    background: rgba(255, 255, 255, 0.1);
-}
-
-.item-wallet {
-    font-weight: 700;
-    margin-bottom: 2px;
-    word-break: break-all;
-    font-size: 9px;
-}
-
-.item-details {
-    font-size: 8px;
-    color: #ccc;
-    opacity: 0.9;
-}
-
-/* STATS BAR */
-.stats-bar {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 6px;
-    margin-bottom: 8px;
-}
-
-.stat-item {
-    padding: 6px;
-    border: 1px solid #00ff41;
-    background: rgba(0, 255, 65, 0.03);
-    text-align: center;
-    border-radius: 4px;
-    font-size: 10px;
+.stat-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .stat-value {
-    font-size: 12px;
-    font-weight: 800;
-    color: #ffff00;
-    margin: 2px 0;
-}
-
-.stat-label {
-    font-size: 9px;
-    color: #00ff41;
-    opacity: 0.9;
-}
-
-/* PROGRESS COMPACT */
-.progress-compact {
-    padding: 6px;
-    border: 1px solid #00ffff;
-    background: rgba(0, 255, 255, 0.03);
-    border-radius: 5px;
-    margin-bottom: 8px;
-}
-
-.progress-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    font-size: 28px;
+    font-weight: 700;
     margin-bottom: 4px;
-    font-size: 10px;
+    background: linear-gradient(135deg, var(--text-primary), var(--text-secondary));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
 }
 
-.progress-bar-compact {
-    width: 100%;
-    height: 12px;
-    background: #000;
-    border: 1px solid #00ff41;
-    border-radius: 3px;
+.stat-trend {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* MAIN CONTENT AREA */
+.main-content {
+    display: grid;
+    grid-template-columns: 1fr 400px;
+    gap: 20px;
+    height: 600px;
+}
+
+/* GAME BOARD */
+.game-board {
+    background: var(--card-bg);
+    border: 1px solid var(--border-glow);
+    border-radius: 16px;
+    padding: 20px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.board-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.board-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.progress-section {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.progress-bar {
+    width: 200px;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
     overflow: hidden;
 }
 
-.progress-fill-compact {
+.progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, #00ff41, #00ffff);
+    background: linear-gradient(90deg, var(--neon-green), var(--neon-blue));
     width: 0%;
-    transition: width 0.3s ease;
+    transition: width 0.5s ease;
 }
 
 .progress-text {
-    font-size: 9px;
-    text-align: center;
-    margin-top: 3px;
-    color: #00ffff;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    min-width: 80px;
 }
 
-/* CONSOLE COMPACT */
-.console-compact {
-    background: #000;
-    border: 1px solid #00ff41;
-    height: 120px;
-    overflow-y: auto;
-    padding: 6px;
-    font-size: 9px;
-    border-radius: 5px;
-    flex-shrink: 0;
+.blocks-container {
+    flex: 1;
+    overflow: auto;
+    padding: 8px;
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.2);
 }
 
-.console-line {
-    margin: 1px 0;
-    word-break: break-all;
-    padding: 2px;
-    border-radius: 2px;
-    font-size: 8px;
+.blocks-grid {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    gap: 4px;
+    max-width: 540px;
+    margin: 0 auto;
 }
 
-.console-info { color: #00ff41; }
-.console-success { color: #ffff00; }
-.console-error { color: #ff4444; }
-
-/* SCROLLBAR */
-::-webkit-scrollbar {
-    width: 4px;
-}
-::-webkit-scrollbar-track {
-    background: #1a1a1a;
-}
-::-webkit-scrollbar-thumb {
-    background: #00ff41;
-    border-radius: 2px;
-}
-
-/* RESPONSIVE */
-@media (max-width: 1200px) {
-    .main-grid {
-        grid-template-columns: 1fr;
-        height: auto;
-    }
-    
-    .minesweeper-grid {
-        grid-template-columns: repeat(10, 50px);
-        grid-auto-rows: 50px;
-        max-height: 300px;
-    }
-    
-    .block {
-        width: 50px;
-        height: 50px;
-    }
-    
-    .block-number {
-        font-size: 12px;
-    }
+.game-block {
+    aspect-ratio: 1;
+    min-height: 48px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    background: var(--card-bg);
+    border: 1px solid var(--border-glow);
 }
 
-@media (max-width: 768px) {
-    .panels-container {
-        grid-template-columns: 1fr;
-    }
-    
-    .previous-winners-panel {
-        grid-column: 1;
-    }
-    
-    .stats-bar {
-        grid-template-columns: repeat(2, 1fr);
-    }
-    
-    .stream-header {
-        grid-template-columns: 1fr;
-        text-align: center;
-    }
+.game-block.hidden {
+    background: linear-gradient(135deg, var(--card-bg), rgba(255, 255, 255, 0.05));
+    border: 1px solid var(--border-glow);
+    animation: gentle-pulse 3s ease-in-out infinite;
 }
 
-/* BLOCK TEXT READABILITY */
+@keyframes gentle-pulse {
+    0%, 100% { opacity: 0.8; }
+    50% { opacity: 1; }
+}
+
+.game-block.revealed.green {
+    background: linear-gradient(135deg, var(--success-color), #059669);
+    border: 1px solid var(--success-color);
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+    color: white;
+    transform: scale(1.02);
+}
+
+.game-block.revealed.red {
+    background: linear-gradient(135deg, var(--danger-color), #dc2626);
+    border: 1px solid var(--danger-color);
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+    color: white;
+    transform: scale(1.02);
+}
+
+.block-number {
+    font-weight: 700;
+    z-index: 2;
+}
+
 .block-wallet {
     position: absolute;
-    bottom: 1px;
-    left: 1px;
-    right: 1px;
-    font-size: 6px;
-    background: rgba(0, 0, 0, 0.9);
-    color: #fff;
-    padding: 1px 2px;
+    bottom: 2px;
+    left: 2px;
+    right: 2px;
+    font-size: 8px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 2px 4px;
     text-align: center;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    border-radius: 1px;
+    border-radius: 4px;
+    z-index: 1;
 }
 
 .block-sol {
     position: absolute;
-    top: 1px;
-    right: 1px;
-    font-size: 6px;
-    background: rgba(0, 0, 0, 0.9);
-    color: #fff;
-    padding: 1px 3px;
-    border-radius: 2px;
+    top: 2px;
+    right: 2px;
+    font-size: 8px;
+    background: var(--neon-orange);
+    color: white;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-weight: 600;
 }
 
 .block-free {
     position: absolute;
-    top: 1px;
-    left: 1px;
-    font-size: 6px;
-    background: rgba(0, 0, 0, 0.9);
-    color: #00ff41;
-    padding: 1px 3px;
-    border-radius: 2px;
+    top: 2px;
+    left: 2px;
+    font-size: 8px;
+    background: var(--neon-green);
+    color: white;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+/* SIDEBAR */
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.info-panel {
+    background: var(--card-bg);
+    border: 1px solid var(--border-glow);
+    border-radius: 12px;
+    overflow: hidden;
+    flex: 1;
+}
+
+.panel-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--border-glow);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.panel-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+}
+
+.panel-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.panel-content {
+    padding: 16px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.user-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.user-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--border-glow);
+    transform: translateX(2px);
+}
+
+.user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--neon-purple), var(--neon-pink));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: white;
+}
+
+.user-info {
+    flex: 1;
+}
+
+.user-wallet {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+}
+
+.user-details {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.activity-feed {
+    background: var(--card-bg);
+    border: 1px solid var(--border-glow);
+    border-radius: 12px;
+    height: 200px;
+    display: flex;
+    flex-direction: column;
+}
+
+.feed-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--border-glow);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.feed-content {
+    flex: 1;
+    padding: 12px;
+    overflow-y: auto;
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.log-entry {
+    margin-bottom: 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.log-info { border-left: 2px solid var(--neon-blue); }
+.log-success { border-left: 2px solid var(--success-color); }
+.log-error { border-left: 2px solid var(--danger-color); }
+
+.log-time {
+    color: var(--text-secondary);
+    font-size: 10px;
+}
+
+/* CUSTOM SCROLLBAR */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--card-bg);
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border-glow);
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--neon-purple);
+}
+
+/* RESPONSIVE DESIGN */
+@media (max-width: 1200px) {
+    .main-content {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    
+    .sidebar {
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        grid-template-rows: auto;
+        flex-direction: row;
+    }
+    
+    .activity-feed {
+        height: 150px;
+    }
+}
+
+@media (max-width: 768px) {
+    .app-container {
+        padding: 12px;
+        gap: 16px;
+    }
+    
+    .app-header {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .stats-dashboard {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+    }
+    
+    .main-content {
+        height: auto;
+    }
+    
+    .sidebar {
+        grid-template-columns: 1fr;
+        flex-direction: column;
+    }
+    
+    .blocks-grid {
+        grid-template-columns: repeat(8, 1fr);
+        gap: 3px;
+    }
+    
+    .game-block {
+        min-height: 36px;
+        font-size: 10px;
+    }
 }
 </style>
 </head>
 <body>
-    <div class="compact-container">
-        <!-- STREAM HEADER -->
-        <div class="stream-header">
-            <div class="game-title">🎮 BWANANA.FUN LIVE</div>
-            <div class="progress-compact">
-                <div class="progress-header">
-                    <span>BLOCKS: <span id="progress-text">0/100</span></span>
-                    <span>TOKEN: ${TOKEN_MINT}</span>
+    <div class="app-container">
+        <!-- HEADER -->
+        <div class="glass-card app-header">
+            <div class="brand-section">
+                <div class="brand-logo">🍌</div>
+                <div class="brand-info">
+                    <h1>BWANANA.FUN</h1>
+                    <div class="subtitle">Solana Block Game • Live Trading</div>
                 </div>
-                <div class="progress-bar-compact">
-                    <div class="progress-fill-compact" id="progress-fill"></div>
-                </div>
-
             </div>
-            <div class="connection-status">
-                <span id="connection-indicator">●</span>
+            <div class="connection-badge">
+                <div class="status-dot" id="connection-indicator"></div>
                 <span id="connection-text">CONNECTING</span>
             </div>
         </div>
 
-        <!-- STATS BAR -->
-        <div class="stats-bar">
-            <div class="stat-item">
-                <div class="stat-label">CREATOR FEES</div>
-                <div class="stat-value" id="total-volume">0.00 SOL</div>
+        <!-- STATS DASHBOARD -->
+        <div class="stats-dashboard">
+            <div class="stat-card">
+                <div class="stat-header">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, var(--neon-green), #059669);">💰</div>
+                    <div class="stat-title">Creator Fees</div>
+                </div>
+                <div class="stat-value" id="total-volume">0.000</div>
+                <div class="stat-trend">SOL collected</div>
             </div>
-            <div class="stat-item">
-                <div class="stat-label">CURRENT PRICE</div>
+            
+            <div class="stat-card">
+                <div class="stat-header">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, var(--neon-blue), #0284c7);">📈</div>
+                    <div class="stat-title">Current Price</div>
+                </div>
                 <div class="stat-value" id="current-price">$0.000000</div>
+                <div class="stat-trend">Per token</div>
             </div>
-            <div class="stat-item">
-                <div class="stat-label">GREEN BLOCKS</div>
+            
+            <div class="stat-card">
+                <div class="stat-header">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, var(--success-color), #059669);">🟢</div>
+                    <div class="stat-title">Green Blocks</div>
+                </div>
                 <div class="stat-value" id="total-green">0</div>
+                <div class="stat-trend">Winners found</div>
             </div>
-            <div class="stat-item">
-                <div class="stat-label">REVEALED</div>
+            
+            <div class="stat-card">
+                <div class="stat-header">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, var(--neon-purple), #7c3aed);">🎯</div>
+                    <div class="stat-title">Revealed</div>
+                </div>
                 <div class="stat-value" id="total-occupied">0</div>
+                <div class="stat-trend">Out of 100 blocks</div>
             </div>
         </div>
 
         <!-- MAIN CONTENT -->
-        <div class="main-grid">
-            <!-- BLOCKS GRID -->
-            <div class="minesweeper-grid" id="minesweeper-grid"></div>
-            
-            <!-- RIGHT PANEL -->
-            <div class="right-panel">
-                <div class="panels-container">
-
-                        <div class="panel-title">🏦 1% HOLDERS</div>
-                        <div class="panel-list" id="holders-list"></div>
-        
-                    
-
-                        <div class="panel-title">🏆 CURRENT BUYERS</div>
-                        <div class="panel-list" id="winner-list"></div>
-            
-
-                        <div class="panel-title">📋 PREVIOUS WINNERS</div>
-                        <div class="panel-list" id="previous-winner-list"></div>
-
+        <div class="main-content">
+            <!-- GAME BOARD -->
+            <div class="game-board">
+                <div class="board-header">
+                    <div class="board-title">🎮 Game Board</div>
+                    <div class="progress-section">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progress-fill"></div>
+                        </div>
+                        <div class="progress-text" id="progress-text">0/100</div>
+                    </div>
                 </div>
                 
-                <!-- CONSOLE -->
-                <div class="console-compact" id="console-output">
+                <div class="blocks-container">
+                    <div class="blocks-grid" id="minesweeper-grid"></div>
+                </div>
+            </div>
 
+            <!-- SIDEBAR -->
+            <div class="sidebar">
+                <div class="info-panel">
+                    <div class="panel-header">
+                        <div class="panel-icon" style="background: var(--neon-purple);">🏦</div>
+                        <div class="panel-title">Top Holders</div>
+                    </div>
+                    <div class="panel-content" id="holders-list"></div>
+                </div>
+
+                <div class="info-panel">
+                    <div class="panel-header">
+                        <div class="panel-icon" style="background: var(--neon-green);">🏆</div>
+                        <div class="panel-title">Recent Winners</div>
+                    </div>
+                    <div class="panel-content" id="winner-list"></div>
+                </div>
+
+                <div class="activity-feed">
+                    <div class="feed-header">
+                        <div class="panel-icon" style="background: var(--neon-blue);">📡</div>
+                        <div class="panel-title">Live Activity</div>
+                    </div>
+                    <div class="feed-content" id="console-output"></div>
                 </div>
             </div>
         </div>
@@ -1183,8 +1367,8 @@ body {
             ws = new WebSocket(\`\${protocol}//\${window.location.host}\`);
             
             ws.onopen = () => {
-                document.getElementById('connection-indicator').className = 'status-connected';
-                document.getElementById('connection-text').textContent = 'LIVE';
+                document.getElementById('connection-indicator').className = 'status-dot status-connected';
+                document.getElementById('connection-text').textContent = 'CONNECTED';
             };
             
             ws.onmessage = (event) => {
@@ -1193,7 +1377,7 @@ body {
             };
             
             ws.onclose = () => {
-                document.getElementById('connection-indicator').className = 'status-disconnected';
+                document.getElementById('connection-indicator').className = 'status-dot status-disconnected';
                 document.getElementById('connection-text').textContent = 'RECONNECTING';
                 setTimeout(connectWebSocket, 2000);
             };
@@ -1204,7 +1388,7 @@ body {
             grid.innerHTML = '';
             for (let i = 0; i < 100; i++) {
                 const block = document.createElement('div');
-                block.className = 'block hidden';
+                block.className = 'game-block hidden';
                 block.id = 'block-' + i;
                 block.innerHTML = '<span class="block-number">' + (i + 1) + '</span>';
                 grid.appendChild(block);
@@ -1217,13 +1401,11 @@ body {
             // Update progress
             document.getElementById('progress-fill').style.width = gameData.progress + '%';
             document.getElementById('progress-text').textContent = 
-                \`\${stats.totalOccupiedBlocks}/100 (\${gameData.progress.toFixed(1)}%)\`;
-            document.getElementById('progress-details').textContent = 
-                \`\${gameData.revealedGreenBlocks}G + \${stats.totalOccupiedBlocks - gameData.revealedGreenBlocks}R = \${stats.totalOccupiedBlocks}T\`;
+                \`\${stats.totalOccupiedBlocks}/100\`;
             
             // Update stats
-            document.getElementById('total-volume').textContent = stats.creatorFees.toFixed(3) + ' SOL';
-            document.getElementById('current-price').textContent = '\$' + stats.currentPrice.toFixed(6);
+            document.getElementById('total-volume').textContent = stats.creatorFees.toFixed(3);
+            document.getElementById('current-price').textContent = '$' + stats.currentPrice.toFixed(6);
             document.getElementById('total-green').textContent = stats.totalGreenBlocks;
             document.getElementById('total-occupied').textContent = stats.totalOccupiedBlocks;
             
@@ -1232,21 +1414,19 @@ body {
                 const blockElement = document.getElementById('block-' + index);
                 if (!blockElement) return;
                 
-                let blockClass = 'block';
+                let blockClass = 'game-block';
                 if (block.status === 'revealed') {
                     blockClass += ' revealed ' + block.color;
                     
                     let blockContent = \`<span class="block-number">\${index + 1}</span>\`;
                     
                     if (block.isGuaranteedGreen && !block.purchase) {
-                        // FREE block for holder
                         const shortWallet = block.assignedHolder ? block.assignedHolder.substring(0, 4) + '...' : 'HOLDER';
                         blockContent += \`
                             <div class="block-wallet" title="\${block.assignedHolder || 'Holder'}">\${shortWallet}</div>
                             <div class="block-free">FREE</div>
                         \`;
                     } else if (block.purchase) {
-                        // Purchased block
                         const shortWallet = block.purchase.wallet.substring(0, 4) + '...';
                         const solAmount = block.blockValue ? block.blockValue.toFixed(2) : '0.10';
                         blockContent += \`
@@ -1275,55 +1455,51 @@ body {
             // Update holders list
             if (stats.millionTokenHolders && stats.millionTokenHolders.length > 0) {
                 const holdersList = document.getElementById('holders-list');
-                holdersList.innerHTML = stats.millionTokenHolders.slice(0, 8).map(holder => \`
-                    <div class="list-item">
-                        <div class="item-wallet">
-                            \${holder.wallet.substring(0, 8)}...\${holder.hasGuaranteedBlock ? (holder.stillQualified ? ' ✅' : ' ❌') : ' ⏳'}
-                        </div>
-                        <div class="item-details">
-                            \${holder.tokens.toLocaleString()} tokens | Block \${holder.assignedBlock || '?'}
+                holdersList.innerHTML = stats.millionTokenHolders.slice(0, 6).map(holder => \`
+                    <div class="user-item">
+                        <div class="user-avatar">\${holder.wallet.substring(0, 2)}</div>
+                        <div class="user-info">
+                            <div class="user-wallet">
+                                \${holder.wallet.substring(0, 8)}...\${holder.hasGuaranteedBlock ? (holder.stillQualified ? ' ✅' : ' ❌') : ' ⏳'}
+                            </div>
+                            <div class="user-details">
+                                \${holder.tokens.toLocaleString()} tokens • Block \${holder.assignedBlock || '?'}
+                            </div>
                         </div>
                     </div>
                 \`).join('');
             }
             
-            // Update winners lists
-            if (gameData.winningWallets.length > 0) {
+            // Update winners list
+            const allWinners = [...gameData.winningWallets, ...gameData.previousWinners].slice(0, 8);
+            if (allWinners.length > 0) {
                 const winnerList = document.getElementById('winner-list');
-                winnerList.innerHTML = gameData.winningWallets.slice(0, 6).map(winner => \`
-                    <div class="list-item">
-                        <div class="item-wallet">
-                            \${winner.wallet.substring(0, 8)}...\${winner.isFree ? ' 🎁' : ''}
-                        </div>
-                        <div class="item-details">
-                            Block \${winner.blockNumber} | \${winner.isFree ? 'FREE' : winner.solAmount.toFixed(2) + 'SOL'}
-                        </div>
-                    </div>
-                \`).join('');
-            }
-            
-            if (gameData.previousWinners.length > 0) {
-                const previousWinnerList = document.getElementById('previous-winner-list');
-                previousWinnerList.innerHTML = gameData.previousWinners.slice(0, 4).map(winner => \`
-                    <div class="list-item">
-                        <div class="item-wallet">
-                            \${winner.wallet.substring(0, 10)}...\${winner.isFree ? ' 🎁' : ''}
-                        </div>
-                        <div class="item-details">
-                            Block \${winner.blockNumber} | \${winner.isFree ? 'FREE' : winner.solAmount.toFixed(2) + 'SOL'}
+                winnerList.innerHTML = allWinners.map(winner => \`
+                    <div class="user-item">
+                        <div class="user-avatar">\${winner.wallet.substring(0, 2)}</div>
+                        <div class="user-info">
+                            <div class="user-wallet">
+                                \${winner.wallet.substring(0, 8)}...\${winner.isFree ? ' 🎁' : ''}
+                            </div>
+                            <div class="user-details">
+                                Block \${winner.blockNumber} • \${winner.isFree ? 'FREE' : winner.solAmount.toFixed(2) + ' SOL'}
+                            </div>
                         </div>
                     </div>
                 \`).join('');
             }
             
-            // Update console
+            // Update activity feed
             const consoleOutput = document.getElementById('console-output');
             consoleOutput.innerHTML = '';
-            consoleMessages.slice(-8).forEach(msg => {
-                const line = document.createElement('div');
-                line.className = 'console-line console-' + msg.type;
-                line.textContent = '[' + new Date(msg.timestamp).toLocaleTimeString() + '] ' + msg.message;
-                consoleOutput.appendChild(line);
+            consoleMessages.slice(-10).forEach(msg => {
+                const entry = document.createElement('div');
+                entry.className = 'log-entry log-' + msg.type;
+                entry.innerHTML = \`
+                    <div class="log-time">[\${new Date(msg.timestamp).toLocaleTimeString()}]</div>
+                    <div>\${msg.message}</div>
+                \`;
+                consoleOutput.appendChild(entry);
             });
             consoleOutput.scrollTop = consoleOutput.scrollHeight;
         }
@@ -1426,6 +1602,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
