@@ -948,34 +948,41 @@ body {
 .blocks-container {
     flex: 1;
     overflow: auto;
-    padding: 8px;
+    padding: 12px;
     border-radius: 12px;
     background: rgba(0, 0, 0, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .blocks-grid {
     display: grid;
     grid-template-columns: repeat(10, 1fr);
-    gap: 4px;
-    max-width: 540px;
-    margin: 0 auto;
+    gap: 6px;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    margin: 0;
 }
 
 .game-block {
     aspect-ratio: 1;
-    min-height: 48px;
+    min-height: 52px;
     border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: 600;
-    font-size: 12px;
+    font-size: 13px;
     cursor: pointer;
     transition: all 0.3s ease;
     position: relative;
     overflow: hidden;
     background: var(--card-bg);
     border: 1px solid var(--border-glow);
+    width: 100%;
+    height: 100%;
 }
 
 .game-block.hidden {
@@ -1012,10 +1019,10 @@ body {
 
 .block-wallet {
     position: absolute;
-    bottom: 2px;
-    left: 2px;
-    right: 2px;
-    font-size: 8px;
+    bottom: 3px;
+    left: 3px;
+    right: 3px;
+    font-size: 9px;
     background: rgba(0, 0, 0, 0.8);
     color: white;
     padding: 2px 4px;
@@ -1026,24 +1033,24 @@ body {
 
 .block-sol {
     position: absolute;
-    top: 2px;
-    right: 2px;
-    font-size: 8px;
+    top: 3px;
+    right: 3px;
+    font-size: 9px;
     background: var(--neon-orange);
     color: white;
-    padding: 2px 4px;
+    padding: 2px 5px;
     border-radius: 4px;
     font-weight: 600;
 }
 
 .block-free {
     position: absolute;
-    top: 2px;
-    left: 2px;
-    font-size: 8px;
+    top: 3px;
+    left: 3px;
+    font-size: 9px;
     background: var(--neon-green);
     color: white;
-    padding: 2px 4px;
+    padding: 2px 5px;
     border-radius: 4px;
     font-weight: 600;
 }
@@ -1602,6 +1609,7 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
 
 
 
