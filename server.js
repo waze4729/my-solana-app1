@@ -1280,43 +1280,152 @@ body {
         </div>
 
         <!-- STATS DASHBOARD -->
-        <div class="stats-dashboard">
-            <div class="stat-card">
-                <div class="stat-header">
-                    <div class="stat-icon" style="background: linear-gradient(135deg, var(--neon-green), #059669);">💰</div>
-                    <div class="stat-title">Creator Fees</div>
-                </div>
-                <div class="stat-value" id="total-volume">0.000</div>
-                <div class="stat-trend">SOL collected</div>
-            </div>
-            
-            <div class="stat-card">
-                <div class="stat-header">
-                    <div class="stat-icon" style="background: linear-gradient(135deg, var(--neon-blue), #0284c7);">📈</div>
-                    <div class="stat-title">Current Price</div>
-                </div>
-                <div class="stat-value" id="current-price">$0.000000</div>
-                <div class="stat-trend">Per token</div>
-            </div>
-            
-            <div class="stat-card">
-                <div class="stat-header">
-                    <div class="stat-icon" style="background: linear-gradient(135deg, var(--success-color), #059669);">🟢</div>
-                    <div class="stat-title">Green Blocks</div>
-                </div>
-                <div class="stat-value" id="total-green">0</div>
-                <div class="stat-trend">Winners found</div>
-            </div>
-            
-            <div class="stat-card">
-                <div class="stat-header">
-                    <div class="stat-icon" style="background: linear-gradient(135deg, var(--neon-purple), #7c3aed);">🎯</div>
-                    <div class="stat-title">Revealed</div>
-                </div>
-                <div class="stat-value" id="total-occupied">0</div>
-                <div class="stat-trend">Out of 100 blocks</div>
-            </div>
+     <div class="stats-dashboard">
+    <div class="stat-card">
+        <div class="stat-header">
+            <div class="stat-icon" style="background: linear-gradient(135deg, var(--neon-green), #059669);">💰</div>
+            <div class="stat-title">Creator Fees</div>
         </div>
+        <div class="stat-value" id="total-volume">0.000</div>
+        <div class="stat-trend">SOL collected</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-header">
+            <div class="stat-icon" style="background: linear-gradient(135deg, var(--neon-blue), #0284c7);">📈</div>
+            <div class="stat-title">Current Price</div>
+        </div>
+        <div class="stat-value" id="current-price">$0.000000</div>
+        <div class="stat-trend">Per token</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-header">
+            <div class="stat-icon" style="background: linear-gradient(135deg, var(--success-color), #059669);">🟢</div>
+            <div class="stat-title">Green Blocks</div>
+        </div>
+        <div class="stat-value" id="total-green">0</div>
+        <div class="stat-trend">Winners found</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-header">
+            <div class="stat-icon" style="background: linear-gradient(135deg, var(--neon-purple), #7c3aed);">🎯</div>
+            <div class="stat-title">Revealed</div>
+        </div>
+        <div class="stat-value" id="total-occupied">0</div>
+        <div class="stat-trend">Out of 100 blocks</div>
+    </div>
+</div>
+
+<style>
+.stats-dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.stat-card {
+    background: linear-gradient(135deg, var(--card-bg), rgba(255, 255, 255, 0.05));
+    border: 1px solid var(--border-glow);
+    border-radius: 10px;
+    padding: 12px;
+    position: relative;
+    overflow: hidden;
+    min-height: 80px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--neon-purple), var(--neon-blue), var(--neon-green));
+}
+
+.stat-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.stat-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+}
+
+.stat-title {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 2px;
+    background: linear-gradient(135deg, var(--text-primary), var(--text-secondary));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1.2;
+}
+
+.stat-trend {
+    font-size: 9px;
+    color: var(--text-secondary);
+    line-height: 1.1;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .stats-dashboard {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+    
+    .stat-card {
+        padding: 10px;
+        min-height: 70px;
+    }
+    
+    .stat-value {
+        font-size: 18px;
+    }
+    
+    .stat-title {
+        font-size: 9px;
+    }
+}
+
+@media (max-width: 480px) {
+    .stats-dashboard {
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+    
+    .stat-card {
+        min-height: 65px;
+        padding: 8px;
+    }
+    
+    .stat-value {
+        font-size: 16px;
+    }
+}
+</style>
 
         <!-- MAIN CONTENT -->
         <div class="main-content">
@@ -1610,3 +1719,4 @@ mainLoop().catch(e => {
     logToConsole(`Fatal error: ${e.message}`, 'error');
     process.exit(1);
 });
+
