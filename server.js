@@ -5,8 +5,8 @@ import http from 'http';
 const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
 const connection = new Connection(RPC_ENDPOINT, { commitment: "confirmed" });
 const TOKEN_MINT = "CRRRncZpL8nCgNNzjCaUNGbJWpT2SVpWaD9hNjujpump";
-const POLL_INTERVAL_MS = 1369; // Increased from 1369ms to 5000ms (5 seconds)
-const PRICE_POLL_INTERVAL_MS = 1369; // Separate interval for price checks (10 seconds)
+const POLL_INTERVAL_MS = 1963; // Increased from 1369ms to 5000ms (5 seconds)
+const PRICE_POLL_INTERVAL_MS = 1963; // Separate interval for price checks (10 seconds)
 
 let lastPriceCheck = 0;
 let lastTransactionCheck = 0;
@@ -105,7 +105,7 @@ function secondsAgo(ts) {
   return `${Math.floor(diff/3600)}h ${Math.floor((diff%3600)/60)}m ago`;
 }
 async function fetchTokenPrice(mintAddress) {
-  const maxRetries = 2; // Reduced from 3 to 2
+  const maxRetries = 3; // Reduced from 3 to 2
   const retryDelay = 5000; // Increased from 3000 to 5000
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -117,7 +117,7 @@ async function fetchTokenPrice(mintAddress) {
       
       if (!res.ok) {
         if (res.status === 429) {
-          logToConsole(`Rate limited by Jupiter API (attempt ${attempt}/${maxRetries}), waiting 10s...`, 'warn');
+          logToConsole(`Rate limited by Jupiter API (attempt ${attempt}/${maxRetries}), waiting 5s...`, 'warn');
           await new Promise(r => setTimeout(r, 10000));
           continue;
         }
@@ -971,6 +971,7 @@ loop().catch(e => {
   logToConsole(`💥 Fatal error: ${e.message}`, 'error');
   process.exit(1);
 });
+
 
 
 
