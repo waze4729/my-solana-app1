@@ -103,7 +103,7 @@ function secondsAgo(ts) {
 
 async function fetchTokenPrice(mintAddress) {
   const maxRetries = 3;
-  const retryDelay = 3000; // 3 seconds
+  const retryDelay = 5000; // 3 seconds
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -912,4 +912,5 @@ loop().catch(e => {
   logToConsole(`💥 Fatal error: ${e.message}`, 'error');
   process.exit(1);
 });
+
 
