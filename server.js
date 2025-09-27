@@ -21,7 +21,7 @@ let consoleMessages = [];
 let totalVolume = 0; // Total volume in SOL
 let roundVolume = 0; // Current round volume
 let roundRewards = []; // Stores top ATH buyers for each round
-const connection = new Connection(RPC_ENDPOINT, { commitment: "confirmed" });
+
 
 const processedTransactions = new Set();
 const recentHolders = new Set();
@@ -233,33 +233,40 @@ function calculateSolSpent(tx) {
     return { solSpent: 0, buyer: null };
   }
 }
-
 async function monitorNewTokenTransactions() {
   try {
     const mintPublicKey = new PublicKey(TOKEN_MINT);
-    const signatures = await connection.getSignaturesForAddress(mintPublicKey, { limit: 10 });
+    // Reduce limit and add delay
+    const signatures = await connection.getSignaturesForAddress(mintPublicKey, { limit: 5 });
+    
     const newPurchases = [];
     logToConsole(`Monitoring ${signatures.length} new signatures`, 'info');
+    
     for (const sig of signatures) {
       if (processedTransactions.has(sig.signature)) continue;
+      
       try {
+        // Add delay between transaction fetches to avoid rate limiting
+        await new Promise(r => setTimeout(r, 1000));
+        
         const tx = await connection.getTransaction(sig.signature, {
           commitment: "confirmed",
           maxSupportedTransactionVersion: 0
         });
+        
         if (!tx || !tx.meta || tx.meta.err) {
           processedTransactions.add(sig.signature);
           continue;
         }
+        
         const txTime = tx.blockTime ? tx.blockTime * 1000 : 0;
-        const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-        if (txTime < fiveMinutesAgo) {
+        const tenMinutesAgo = Date.now() - 10 * 60 * 1000; // Increased to 10 minutes
+        if (txTime < tenMinutesAgo) {
           processedTransactions.add(sig.signature);
           continue;
         }
-        const fullTxDetails = await getFullTransactionDetails(sig.signature);
-        if (fullTxDetails) fullTransactions.push(fullTxDetails);
-        const purchase = await analyzeTokenPurchase(tx, sig.signature, fullTxDetails);
+        
+        const purchase = await analyzeTokenPurchase(tx, sig.signature);
         if (purchase) {
           processedTransactions.add(sig.signature);
           newPurchases.push(purchase);
@@ -267,16 +274,25 @@ async function monitorNewTokenTransactions() {
         } else {
           processedTransactions.add(sig.signature);
         }
-        await new Promise(r => setTimeout(r, 500));
       } catch (e) {
-        logToConsole(`Error processing transaction ${sig.signature}: ${e.message}`, 'error');
+        if (e.message.includes('429') || e.message.includes('rate limited')) {
+          logToConsole(`Rate limited, skipping transaction ${sig.signature}`, 'warn');
+          await new Promise(r => setTimeout(r, 5000));
+        } else {
+          logToConsole(`Error processing transaction ${sig.signature}: ${e.message}`, 'error');
+        }
         processedTransactions.add(sig.signature);
       }
     }
-    if (newPurchases.length > 0) broadcastUpdate();
+    
     return newPurchases;
   } catch (e) {
-    logToConsole(`Error monitoring transactions: ${e.message}`, 'error');
+    if (e.message.includes('429') || e.message.includes('rate limited')) {
+      logToConsole(`Rate limited on signature fetch, waiting 10 seconds...`, 'warn');
+      await new Promise(r => setTimeout(r, 10000));
+    } else {
+      logToConsole(`Error monitoring transactions: ${e.message}`, 'error');
+    }
     return [];
   }
 }
@@ -940,6 +956,7 @@ loop().catch(e => {
   logToConsole(`💥 Fatal error: ${e.message}`, 'error');
   process.exit(1);
 });
+
 
 
 
