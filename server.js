@@ -332,10 +332,7 @@ async function analyzeTokenPurchase(tx, signature, fullTxDetails = null) {
     logToConsole(`Error analyzing purchase: ${e.message}`, 'error');
     return null;
   }
-}
-
-// Function to check and update round rewards
-function updateRoundRewards(newPurchase) {
+}function updateRoundRewards(newPurchase) {
   if (newPurchase.isATHPurchase) {
     // Only count volume for purchases meeting the minimum SOL requirement
     if (newPurchase.solAmount >= ATH_BUY_MIN_SOL) {
@@ -343,50 +340,56 @@ function updateRoundRewards(newPurchase) {
       totalVolume += newPurchase.solAmount;
       
       logToConsole(`📈 Volume update: +${newPurchase.solAmount.toFixed(4)} SOL (Round: ${roundVolume.toFixed(4)}/${VOLUME_TARGET_SOL} SOL)`, 'info');
-    }
-    
-    // Check if we reached the volume target
-    if (roundVolume >= VOLUME_TARGET_SOL) {
-      const currentRound = roundRewards.length + 1;
       
-      // Find the top ATH buyer for this round (only purchases from this round)
-      const roundStartTime = roundRewards.length > 0 ? roundRewards[roundRewards.length - 1].endTime : 0;
-      const roundAthPurchases = athPurchases.filter(p => 
-        p.isATHPurchase && 
-        p.solAmount >= ATH_BUY_MIN_SOL &&
-        p.txTime >= roundStartTime
-      );
+      // DEBUG: Check why round isn't completing
+      logToConsole(`🔍 DEBUG: Round volume = ${roundVolume}, Target = ${VOLUME_TARGET_SOL}`, 'debug');
       
-      if (roundAthPurchases.length > 0) {
-        const topAthBuyer = roundAthPurchases.sort((a, b) => b.marketPrice - a.marketPrice)[0];
+      // Check if we reached the volume target (THIS IS THE KEY FIX)
+      if (roundVolume >= VOLUME_TARGET_SOL) {
+        const currentRound = roundRewards.length + 1;
         
-        const roundReward = {
-          round: currentRound,
-          wallet: topAthBuyer.wallet,
-          signature: topAthBuyer.signature,
-          marketPrice: topAthBuyer.marketPrice,
-          solAmount: topAthBuyer.solAmount,
-          timestamp: topAthBuyer.timestamp,
-          txTime: topAthBuyer.txTime,
-          endTime: Date.now(),
-          volumeReached: roundVolume
-        };
+        // Find all ATH purchases from this round
+        const roundStartTime = roundRewards.length > 0 ? roundRewards[roundRewards.length - 1].endTime : 0;
+        const roundAthPurchases = athPurchases.filter(p => 
+          p.isATHPurchase && 
+          p.solAmount >= ATH_BUY_MIN_SOL &&
+          p.txTime >= roundStartTime
+        );
         
-        roundRewards.push(roundReward);
+        logToConsole(`🔍 DEBUG: Found ${roundAthPurchases.length} ATH purchases in current round`, 'debug');
         
-        logToConsole(`🎉 ROUND ${currentRound} COMPLETE! Top ATH Buyer: ${topAthBuyer.wallet} at $${topAthBuyer.marketPrice.toFixed(8)}`, 'success');
-        logToConsole(`🏆 REWARD SAVED: Round ${currentRound} winner permanently stored`, 'success');
-        
-        // RESET ROUND VOLUME FOR NEXT ROUND
-        roundVolume = 0;
-        
-        logToConsole(`🔄 ROUND ${currentRound + 1} STARTED! Volume target: ${VOLUME_TARGET_SOL} SOL`, 'info');
+        if (roundAthPurchases.length > 0) {
+          const topAthBuyer = roundAthPurchases.sort((a, b) => b.marketPrice - a.marketPrice)[0];
+          
+          const roundReward = {
+            round: currentRound,
+            wallet: topAthBuyer.wallet,
+            signature: topAthBuyer.signature,
+            marketPrice: topAthBuyer.marketPrice,
+            solAmount: topAthBuyer.solAmount,
+            timestamp: topAthBuyer.timestamp,
+            txTime: topAthBuyer.txTime,
+            endTime: Date.now(),
+            volumeReached: roundVolume
+          };
+          
+          roundRewards.push(roundReward);
+          
+          logToConsole(`🎉 ROUND ${currentRound} COMPLETE! Top ATH Buyer: ${topAthBuyer.wallet} at $${topAthBuyer.marketPrice.toFixed(8)}`, 'success');
+          logToConsole(`🏆 REWARD SAVED: Round ${currentRound} winner stored in memory`, 'success');
+          
+          // RESET ROUND VOLUME FOR NEXT ROUND
+          roundVolume = 0;
+          
+          logToConsole(`🔄 ROUND ${currentRound + 1} STARTED! Volume target: ${VOLUME_TARGET_SOL} SOL`, 'info');
+        } else {
+          logToConsole(`❌ No qualifying ATH purchases found for round ${currentRound}`, 'error');
+        }
       }
     }
     broadcastUpdate();
   }
 }
-
 // ---- EXPRESS SERVER ----
 app.get("/", (req, res) => {
   res.setHeader("Content-Type", "text/html");
@@ -862,7 +865,6 @@ server.listen(PORT, () => {
   logToConsole(`⚡ WebSocket server initialized`, 'info');
   logToConsole(`🎯 Volume Round System Activated - Target: ${VOLUME_TARGET_SOL} SOL per round`, 'success');
 });
-
 // ---- BACKGROUND DATA LOOP ----
 async function loop() {
   let currentPriceData = null;
@@ -872,35 +874,40 @@ async function loop() {
       const priceResult = await fetchTokenPrice(TOKEN_MINT);
       if (priceResult) {
         currentPriceData = priceResult;
+        
+        // Update ATH if this is a new all-time high
+        if (currentPriceData.isNewATH) {
+          allTimeHighPrice = currentPriceData.price;
+        }
+        
         priceHistory.push(priceResult);
         if (priceHistory.length > 1000) priceHistory.shift();
         broadcastUpdate();
       }
+      
       const newPurchases = await monitorNewTokenTransactions();
       if (newPurchases.length > 0 && currentPriceData) {
         for (const purchaseGroup of newPurchases) {
           if (!purchaseGroup) continue;
           for (const purchase of purchaseGroup) {
             purchase.marketPrice = currentPriceData.price;
-// Mark as ATH purchase if bought at or above current ATH price
-purchase.isATHPurchase = currentPriceData.price >= allTimeHighPrice;
-
-// Also update allTimeHighPrice if this is a new ATH
-if (currentPriceData.isNewATH) {
-    allTimeHighPrice = currentPriceData.price;
-}
+            
+            // FIXED: Mark as ATH purchase if bought at or above current ATH price
+            purchase.isATHPurchase = currentPriceData.price >= allTimeHighPrice;
+            
             athPurchases.push(purchase);
             
             // Update volume and check for round rewards
             updateRoundRewards(purchase);
             
             if (purchase.isATHPurchase) {
-              logToConsole(`🎯 ATH PURCHASE! Wallet: ${purchase.wallet}, Price: ${currentPriceData.price.toFixed(8)}`, 'success');
+              logToConsole(`🎯 ATH PURCHASE! Wallet: ${purchase.wallet}, Price: $${currentPriceData.price.toFixed(8)}, ATH: $${allTimeHighPrice.toFixed(8)}`, 'success');
             }
           }
         }
         broadcastUpdate();
       }
+      
       if (processedTransactions.size > 10000) {
         const toRemove = Array.from(processedTransactions).slice(0, 5000);
         toRemove.forEach(sig => processedTransactions.delete(sig));
@@ -916,10 +923,12 @@ if (currentPriceData.isNewATH) {
     await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
   }
 }
+
 loop().catch(e => {
   logToConsole(`💥 Fatal error: ${e.message}`, 'error');
   process.exit(1);
 });
+
 
 
 
