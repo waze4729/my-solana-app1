@@ -5,8 +5,8 @@ import http from 'http';
 const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
 const connection = new Connection(RPC_ENDPOINT, { commitment: "confirmed" });
 const TOKEN_MINT = "CRRRncZpL8nCgNNzjCaUNGbJWpT2SVpWaD9hNjujpump";
-const POLL_INTERVAL_MS = 5000; // Increased from 1369ms to 5000ms (5 seconds)
-const PRICE_POLL_INTERVAL_MS = 2500; // Separate interval for price checks (10 seconds)
+const POLL_INTERVAL_MS = 1369; // Increased from 1369ms to 5000ms (5 seconds)
+const PRICE_POLL_INTERVAL_MS = 1369; // Separate interval for price checks (10 seconds)
 
 let lastPriceCheck = 0;
 let lastTransactionCheck = 0;
@@ -956,6 +956,7 @@ loop().catch(e => {
   logToConsole(`💥 Fatal error: ${e.message}`, 'error');
   process.exit(1);
 });
+
 
 
 
