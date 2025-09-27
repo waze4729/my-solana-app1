@@ -4,8 +4,8 @@ import { WebSocketServer } from 'ws';
 import http from 'http';
 
 const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
-const TOKEN_MINT = "s5gUqwdD8d6JR8k8petVFYeYjsPgbkk6BF4Ndk7Z6uy";
-const POLL_INTERVAL_MS = 2000;
+const TOKEN_MINT = "7Pnqg1S6MYrL6AP1ZXcToTHfdBbTB77ze6Y33qBBpump";
+const POLL_INTERVAL_MS = 1369;
 const ATH_BUY_MIN_SOL = 0.1; // Only show ATH CHAD if purchase >= 0.1 SOL
 const VOLUME_TARGET_SOL = 10; // Volume target for round rewards
 
@@ -102,39 +102,71 @@ function secondsAgo(ts) {
 }
 
 async function fetchTokenPrice(mintAddress) {
-  try {
-    const res = await fetch(`https://lite-api.jup.ag/price/v3?ids=${mintAddress}`);
-    if (!res.ok) {
-      logToConsole(`Failed to fetch price: HTTP ${res.status}`, 'error');
-      return null;
-    }
-    const data = await res.json();
-    if (data[mintAddress]) {
-      const tokenData = data[mintAddress];
-      const price = tokenData.usdPrice || 0;
-      const isNewATH = price > allTimeHighPrice;
-      if (isNewATH) {
-        allTimeHighPrice = price;
-        logToConsole(`🚀 NEW ALL-TIME HIGH: $${price.toFixed(8)}`, 'success');
+  const maxRetries = 3;
+  const retryDelay = 3000; // 3 seconds
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(`https://lite-api.jup.ag/price/v3?ids=${mintAddress}`);
+      
+      if (!res.ok) {
+        if (attempt < maxRetries) {
+          logToConsole(`Failed to fetch price (attempt ${attempt}/${maxRetries}): HTTP ${res.status}, retrying in 3s...`, 'warn');
+          await new Promise(r => setTimeout(r, retryDelay));
+          continue;
+        } else {
+          logToConsole(`Failed to fetch price after ${maxRetries} attempts: HTTP ${res.status}`, 'error');
+          return null;
+        }
       }
-      logToConsole(`Price fetched: $${price.toFixed(8)} (24h: ${(tokenData.priceChange24h * 100).toFixed(2)}%)`, 'info');
-      broadcastUpdate();
-      return { 
-        price, 
-        timestamp: Date.now(), 
-        isNewATH,
-        blockId: tokenData.blockId,
-        decimals: tokenData.decimals,
-        priceChange24h: tokenData.priceChange24h
-      };
+      
+      const data = await res.json();
+      if (data[mintAddress]) {
+        const tokenData = data[mintAddress];
+        const price = tokenData.usdPrice || 0;
+        const isNewATH = price > allTimeHighPrice;
+        
+        if (isNewATH) {
+          allTimeHighPrice = price;
+          logToConsole(`🚀 NEW ALL-TIME HIGH: $${price.toFixed(8)}`, 'success');
+        }
+        
+        if (attempt > 1) {
+          logToConsole(`✅ Price fetch successful on attempt ${attempt}`, 'success');
+        }
+        
+        logToConsole(`Price fetched: $${price.toFixed(8)} (24h: ${(tokenData.priceChange24h * 100).toFixed(2)}%)`, 'info');
+        broadcastUpdate();
+        
+        return { 
+          price, 
+          timestamp: Date.now(), 
+          isNewATH,
+          blockId: tokenData.blockId,
+          decimals: tokenData.decimals,
+          priceChange24h: tokenData.priceChange24h
+        };
+      } else {
+        if (attempt < maxRetries) {
+          logToConsole(`No price data found (attempt ${attempt}/${maxRetries}), retrying in 3s...`, 'warn');
+          await new Promise(r => setTimeout(r, retryDelay));
+          continue;
+        } else {
+          logToConsole(`No price data found after ${maxRetries} attempts`, 'error');
+          return null;
+        }
+      }
+    } catch (e) {
+      if (attempt < maxRetries) {
+        logToConsole(`Error fetching token price (attempt ${attempt}/${maxRetries}): ${e.message}, retrying in 3s...`, 'warn');
+        await new Promise(r => setTimeout(r, retryDelay));
+      } else {
+        logToConsole(`Error fetching token price after ${maxRetries} attempts: ${e.message}`, 'error');
+        return null;
+      }
     }
-    return null;
-  } catch (e) {
-    logToConsole(`Error fetching token price: ${e.message}`, 'error');
-    return null;
   }
 }
-
 async function getFullTransactionDetails(signature) {
   try {
     const tx = await connection.getTransaction(signature, {
@@ -880,3 +912,4 @@ loop().catch(e => {
   logToConsole(`💥 Fatal error: ${e.message}`, 'error');
   process.exit(1);
 });
+
