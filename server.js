@@ -2,22 +2,8 @@ import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import express from "express";
 import { WebSocketServer } from 'ws';
 import http from 'http';
-const RPC_ENDPOINTS = [
-  "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a",
-  "https://api.mainnet-beta.solana.com"
-];
-
-let currentRpcIndex = 0;
-
-function getCurrentRpc() {
-  return RPC_ENDPOINTS[currentRpcIndex];
-}
-
-function switchRpc() {
-  currentRpcIndex = (currentRpcIndex + 1) % RPC_ENDPOINTS.length;
-  connection = new Connection(getCurrentRpc(), { commitment: "confirmed" });
-  logToConsole(`🔄 Switched to RPC endpoint: ${getCurrentRpc()}`, 'info');
-}
+const RPC_ENDPOINT = [
+  "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a"];
 const TOKEN_MINT = "CRRRncZpL8nCgNNzjCaUNGbJWpT2SVpWaD9hNjujpump";
 const POLL_INTERVAL_MS = 5000; // Increased from 1369ms to 5000ms (5 seconds)
 const PRICE_POLL_INTERVAL_MS = 2500; // Separate interval for price checks (10 seconds)
@@ -954,6 +940,7 @@ loop().catch(e => {
   logToConsole(`💥 Fatal error: ${e.message}`, 'error');
   process.exit(1);
 });
+
 
 
 
