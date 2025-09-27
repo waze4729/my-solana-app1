@@ -296,7 +296,6 @@ async function monitorNewTokenTransactions() {
     return [];
   }
 }
-
 async function analyzeTokenPurchase(tx, signature, fullTxDetails = null) {
   try {
     if (!tx?.meta || !tx?.transaction) return null;
@@ -306,6 +305,7 @@ async function analyzeTokenPurchase(tx, signature, fullTxDetails = null) {
       balance?.uiTokenAmount?.uiAmount > 0
     );
     if (tokenTransfers.length === 0) return null;
+    
     const { solSpent, buyer } = calculateSolSpent(tx);
     const accountKeys = tx.transaction.message?.accountKeys || [];
     const accountAddresses = accountKeys.map(account => ({
@@ -313,13 +313,18 @@ async function analyzeTokenPurchase(tx, signature, fullTxDetails = null) {
       signer: account?.signer || false,
       writable: account?.writable || false
     }));
+    
     const purchases = [];
     for (const transfer of tokenTransfers) {
       const wallet = transfer.owner || 'unknown';
       const tokenAmount = transfer.uiTokenAmount?.uiAmount || 0;
-      if (recentHolders.has(wallet)) continue;
+      
+      // FIX: Remove or modify this filter that might be blocking purchases
+      // if (recentHolders.has(wallet)) continue;
+      
       let pricePerToken = 0;
       if (solSpent > 0 && tokenAmount > 0) pricePerToken = solSpent / tokenAmount;
+      
       const purchaseDetails = {
         wallet: wallet,
         buyerAddress: buyer,
@@ -329,15 +334,18 @@ async function analyzeTokenPurchase(tx, signature, fullTxDetails = null) {
         solAmount: solSpent,
         tokenAmount: tokenAmount,
         pricePerToken: pricePerToken,
-        marketPrice: 0,
-        isATHPurchase: false,
+        marketPrice: 0, // Will be set later with current price
+        isATHPurchase: false, // Will be set later
         allAddresses: accountAddresses,
         slot: tx.slot || 0,
         fee: tx.meta.fee ? tx.meta.fee / LAMPORTS_PER_SOL : 0,
         computeUnits: tx.meta.computeUnitsConsumed || null
       };
+      
       if (fullTxDetails) purchaseDetails.fullTransaction = fullTxDetails;
       purchases.push(purchaseDetails);
+      
+      // Only add to recent holders if you want to filter duplicates
       recentHolders.add(wallet);
     }
     return purchases.length > 0 ? purchases : null;
@@ -346,6 +354,8 @@ async function analyzeTokenPurchase(tx, signature, fullTxDetails = null) {
     return null;
   }
 }function updateRoundRewards(newPurchase) {
+  logToConsole(`🔍 updateRoundRewards called: isATH=${newPurchase.isATHPurchase}, SOL=${newPurchase.solAmount}, minSOL=${ATH_BUY_MIN_SOL}`, 'debug');
+  
   if (newPurchase.isATHPurchase) {
     // Only count volume for purchases meeting the minimum SOL requirement
     if (newPurchase.solAmount >= ATH_BUY_MIN_SOL) {
@@ -354,10 +364,7 @@ async function analyzeTokenPurchase(tx, signature, fullTxDetails = null) {
       
       logToConsole(`📈 Volume update: +${newPurchase.solAmount.toFixed(4)} SOL (Round: ${roundVolume.toFixed(4)}/${VOLUME_TARGET_SOL} SOL)`, 'info');
       
-      // DEBUG: Check why round isn't completing
-      logToConsole(`🔍 DEBUG: Round volume = ${roundVolume}, Target = ${VOLUME_TARGET_SOL}`, 'debug');
-      
-      // Check if we reached the volume target (THIS IS THE KEY FIX)
+      // Check if we reached the volume target
       if (roundVolume >= VOLUME_TARGET_SOL) {
         const currentRound = roundRewards.length + 1;
         
@@ -369,7 +376,7 @@ async function analyzeTokenPurchase(tx, signature, fullTxDetails = null) {
           p.txTime >= roundStartTime
         );
         
-        logToConsole(`🔍 DEBUG: Found ${roundAthPurchases.length} ATH purchases in current round`, 'debug');
+        logToConsole(`🔍 Round ${currentRound} completion: ${roundAthPurchases.length} qualifying purchases`, 'debug');
         
         if (roundAthPurchases.length > 0) {
           const topAthBuyer = roundAthPurchases.sort((a, b) => b.marketPrice - a.marketPrice)[0];
@@ -387,18 +394,15 @@ async function analyzeTokenPurchase(tx, signature, fullTxDetails = null) {
           };
           
           roundRewards.push(roundReward);
-          
-          logToConsole(`🎉 ROUND ${currentRound} COMPLETE! Top ATH Buyer: ${topAthBuyer.wallet} at $${topAthBuyer.marketPrice.toFixed(8)}`, 'success');
-          logToConsole(`🏆 REWARD SAVED: Round ${currentRound} winner stored in memory`, 'success');
+          logToConsole(`🎉 ROUND ${currentRound} COMPLETE! Top ATH Buyer: ${topAthBuyer.wallet}`, 'success');
           
           // RESET ROUND VOLUME FOR NEXT ROUND
           roundVolume = 0;
-          
-          logToConsole(`🔄 ROUND ${currentRound + 1} STARTED! Volume target: ${VOLUME_TARGET_SOL} SOL`, 'info');
-        } else {
-          logToConsole(`❌ No qualifying ATH purchases found for round ${currentRound}`, 'error');
+          logToConsole(`🔄 ROUND ${currentRound + 1} STARTED!`, 'info');
         }
       }
+    } else {
+      logToConsole(`🔍 ATH purchase below min SOL: ${newPurchase.solAmount.toFixed(4)} < ${ATH_BUY_MIN_SOL}`, 'debug');
     }
     broadcastUpdate();
   }
@@ -877,9 +881,7 @@ server.listen(PORT, () => {
   logToConsole(`📊 Monitoring token: ${TOKEN_MINT}`, 'info');
   logToConsole(`⚡ WebSocket server initialized`, 'info');
   logToConsole(`🎯 Volume Round System Activated - Target: ${VOLUME_TARGET_SOL} SOL per round`, 'success');
-});
-// ---- BACKGROUND DATA LOOP ----
-// ---- BACKGROUND DATA LOOP ----
+});// ---- BACKGROUND DATA LOOP ----
 async function loop() {
   let currentPriceData = null;
   logToConsole('🔄 Starting monitoring loop...', 'info');
@@ -888,74 +890,88 @@ async function loop() {
     try {
       const now = Date.now();
       
-      // Price check every 10 seconds (instead of every loop)
+      // Price check every 2.5 seconds
       if (now - lastPriceCheck > PRICE_POLL_INTERVAL_MS) {
-        const priceResult = await fetchTokenPrice(TOKEN_MINT);
-        if (priceResult) {
-          currentPriceData = priceResult;
-          
-          // Update ATH if this is a new all-time high
-          if (currentPriceData.isNewATH) {
-            allTimeHighPrice = currentPriceData.price;
+        try {
+          const priceResult = await fetchTokenPrice(TOKEN_MINT);
+          if (priceResult) {
+            currentPriceData = priceResult;
+            
+            // Update ATH if this is a new all-time high
+            if (currentPriceData.isNewATH) {
+              allTimeHighPrice = currentPriceData.price;
+              logToConsole(`🚀 NEW ALL-TIME HIGH: $${currentPriceData.price.toFixed(8)}`, 'success');
+            }
+            
+            priceHistory.push(priceResult);
+            if (priceHistory.length > 1000) priceHistory.shift();
+            broadcastUpdate();
           }
-          
-          priceHistory.push(priceResult);
-          if (priceHistory.length > 1000) priceHistory.shift();
-          broadcastUpdate();
+        } catch (e) {
+          logToConsole(`Price fetch error: ${e.message}`, 'error');
         }
         lastPriceCheck = now;
       }
       
-      // Transaction check every 5 seconds (instead of every loop)
+      // Transaction check every 1.369 seconds
       if (now - lastTransactionCheck > POLL_INTERVAL_MS) {
-        const newPurchases = await monitorNewTokenTransactions();
-        if (newPurchases.length > 0 && currentPriceData) {
-          for (const purchaseGroup of newPurchases) {
-            if (!purchaseGroup) continue;
-            for (const purchase of purchaseGroup) {
-              purchase.marketPrice = currentPriceData.price;
-              
-              // Mark as ATH purchase if bought at or above current ATH price
-              purchase.isATHPurchase = currentPriceData.price >= allTimeHighPrice;
-              
-              athPurchases.push(purchase);
-              
-              // Update volume and check for round rewards
-              updateRoundRewards(purchase);
-              
-              if (purchase.isATHPurchase) {
-                logToConsole(`🎯 ATH PURCHASE! Wallet: ${purchase.wallet}, Price: $${currentPriceData.price.toFixed(8)}, ATH: $${allTimeHighPrice.toFixed(8)}`, 'success');
+        try {
+          const newPurchases = await monitorNewTokenTransactions();
+          if (newPurchases.length > 0 && currentPriceData) {
+            for (const purchaseGroup of newPurchases) {
+              if (!purchaseGroup) continue;
+              for (const purchase of purchaseGroup) {
+                // Use the current price data for this purchase
+                purchase.marketPrice = currentPriceData.price;
+                
+                // FIX: Proper ATH detection - compare purchase price to current ATH
+                purchase.isATHPurchase = currentPriceData.price >= allTimeHighPrice;
+                
+                athPurchases.push(purchase);
+                
+                // Update volume and check for round rewards
+                updateRoundRewards(purchase);
+                
+                if (purchase.isATHPurchase) {
+                  logToConsole(`🎯 ATH PURCHASE! Wallet: ${purchase.wallet}, SOL: ${purchase.solAmount.toFixed(4)}, Price: $${currentPriceData.price.toFixed(8)}`, 'success');
+                } else {
+                  logToConsole(`📊 Regular purchase: ${purchase.wallet}, SOL: ${purchase.solAmount.toFixed(4)}`, 'info');
+                }
               }
             }
+            broadcastUpdate(); // Update the interface
           }
-          broadcastUpdate();
+        } catch (e) {
+          logToConsole(`Transaction monitoring error: ${e.message}`, 'error');
         }
         lastTransactionCheck = now;
       }
       
-      // Cleanup operations (less frequent)
-      if (processedTransactions.size > 10000) {
-        const toRemove = Array.from(processedTransactions).slice(0, 5000);
+      // Cleanup operations
+      if (processedTransactions.size > 5000) {
+        const toRemove = Array.from(processedTransactions).slice(0, 2000);
         toRemove.forEach(sig => processedTransactions.delete(sig));
         logToConsole('🧹 Cleaned up old processed transactions', 'info');
       }
-      if (recentHolders.size > 5000) {
+      
+      if (recentHolders.size > 2000) {
         recentHolders.clear();
         logToConsole('🧹 Cleared recent holders cache', 'info');
       }
+      
     } catch (e) {
       logToConsole(`❌ Error in main loop: ${e.message}`, 'error');
     }
     
-    // Shorter sleep since we're now using timers
-    await new Promise(r => setTimeout(r, 1000));
+    // Short delay to prevent tight looping
+    await new Promise(r => setTimeout(r, 100));
   }
 }
-
 loop().catch(e => {
   logToConsole(`💥 Fatal error: ${e.message}`, 'error');
   process.exit(1);
 });
+
 
 
 
