@@ -2,10 +2,28 @@ import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import express from "express";
 import { WebSocketServer } from 'ws';
 import http from 'http';
+const RPC_ENDPOINTS = [
+  "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a",
+  "https://api.mainnet-beta.solana.com"
+];
 
-const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
+let currentRpcIndex = 0;
+
+function getCurrentRpc() {
+  return RPC_ENDPOINTS[currentRpcIndex];
+}
+
+function switchRpc() {
+  currentRpcIndex = (currentRpcIndex + 1) % RPC_ENDPOINTS.length;
+  connection = new Connection(getCurrentRpc(), { commitment: "confirmed" });
+  logToConsole(`🔄 Switched to RPC endpoint: ${getCurrentRpc()}`, 'info');
+}
 const TOKEN_MINT = "CRRRncZpL8nCgNNzjCaUNGbJWpT2SVpWaD9hNjujpump";
-const POLL_INTERVAL_MS = 1900;
+const POLL_INTERVAL_MS = 5000; // Increased from 1369ms to 5000ms (5 seconds)
+const PRICE_POLL_INTERVAL_MS = 2500; // Separate interval for price checks (10 seconds)
+
+let lastPriceCheck = 0;
+let lastTransactionCheck = 0;
 const ATH_BUY_MIN_SOL = 0.1; // Only show ATH CHAD if purchase >= 0.1 SOL
 const VOLUME_TARGET_SOL = 10; // Volume target for round rewards
 
@@ -100,18 +118,25 @@ function secondsAgo(ts) {
   if (diff < 3600) return `${Math.floor(diff/60)}m ${diff%60}s ago`;
   return `${Math.floor(diff/3600)}h ${Math.floor((diff%3600)/60)}m ago`;
 }
-
 async function fetchTokenPrice(mintAddress) {
-  const maxRetries = 3;
-  const retryDelay = 5000; // 3 seconds
+  const maxRetries = 2; // Reduced from 3 to 2
+  const retryDelay = 5000; // Increased from 3000 to 5000
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
+      // Add delay between price checks
+      await new Promise(r => setTimeout(r, 1000));
+      
       const res = await fetch(`https://lite-api.jup.ag/price/v3?ids=${mintAddress}`);
       
       if (!res.ok) {
+        if (res.status === 429) {
+          logToConsole(`Rate limited by Jupiter API (attempt ${attempt}/${maxRetries}), waiting 10s...`, 'warn');
+          await new Promise(r => setTimeout(r, 10000));
+          continue;
+        }
         if (attempt < maxRetries) {
-          logToConsole(`Failed to fetch price (attempt ${attempt}/${maxRetries}): HTTP ${res.status}, retrying in 3s...`, 'warn');
+          logToConsole(`Failed to fetch price (attempt ${attempt}/${maxRetries}): HTTP ${res.status}, retrying in 5s...`, 'warn');
           await new Promise(r => setTimeout(r, retryDelay));
           continue;
         } else {
@@ -135,30 +160,16 @@ async function fetchTokenPrice(mintAddress) {
           logToConsole(`✅ Price fetch successful on attempt ${attempt}`, 'success');
         }
         
-        logToConsole(`Price fetched: $${price.toFixed(8)} (24h: ${(tokenData.priceChange24h * 100).toFixed(2)}%)`, 'info');
-        broadcastUpdate();
-        
         return { 
           price, 
           timestamp: Date.now(), 
           isNewATH,
-          blockId: tokenData.blockId,
-          decimals: tokenData.decimals,
           priceChange24h: tokenData.priceChange24h
         };
-      } else {
-        if (attempt < maxRetries) {
-          logToConsole(`No price data found (attempt ${attempt}/${maxRetries}), retrying in 3s...`, 'warn');
-          await new Promise(r => setTimeout(r, retryDelay));
-          continue;
-        } else {
-          logToConsole(`No price data found after ${maxRetries} attempts`, 'error');
-          return null;
-        }
       }
     } catch (e) {
       if (attempt < maxRetries) {
-        logToConsole(`Error fetching token price (attempt ${attempt}/${maxRetries}): ${e.message}, retrying in 3s...`, 'warn');
+        logToConsole(`Error fetching token price (attempt ${attempt}/${maxRetries}): ${e.message}, retrying in 5s...`, 'warn');
         await new Promise(r => setTimeout(r, retryDelay));
       } else {
         logToConsole(`Error fetching token price after ${maxRetries} attempts: ${e.message}`, 'error');
@@ -866,48 +877,61 @@ server.listen(PORT, () => {
   logToConsole(`🎯 Volume Round System Activated - Target: ${VOLUME_TARGET_SOL} SOL per round`, 'success');
 });
 // ---- BACKGROUND DATA LOOP ----
+// ---- BACKGROUND DATA LOOP ----
 async function loop() {
   let currentPriceData = null;
   logToConsole('🔄 Starting monitoring loop...', 'info');
+  
   while (true) {
     try {
-      const priceResult = await fetchTokenPrice(TOKEN_MINT);
-      if (priceResult) {
-        currentPriceData = priceResult;
-        
-        // Update ATH if this is a new all-time high
-        if (currentPriceData.isNewATH) {
-          allTimeHighPrice = currentPriceData.price;
+      const now = Date.now();
+      
+      // Price check every 10 seconds (instead of every loop)
+      if (now - lastPriceCheck > PRICE_POLL_INTERVAL_MS) {
+        const priceResult = await fetchTokenPrice(TOKEN_MINT);
+        if (priceResult) {
+          currentPriceData = priceResult;
+          
+          // Update ATH if this is a new all-time high
+          if (currentPriceData.isNewATH) {
+            allTimeHighPrice = currentPriceData.price;
+          }
+          
+          priceHistory.push(priceResult);
+          if (priceHistory.length > 1000) priceHistory.shift();
+          broadcastUpdate();
         }
-        
-        priceHistory.push(priceResult);
-        if (priceHistory.length > 1000) priceHistory.shift();
-        broadcastUpdate();
+        lastPriceCheck = now;
       }
       
-      const newPurchases = await monitorNewTokenTransactions();
-      if (newPurchases.length > 0 && currentPriceData) {
-        for (const purchaseGroup of newPurchases) {
-          if (!purchaseGroup) continue;
-          for (const purchase of purchaseGroup) {
-            purchase.marketPrice = currentPriceData.price;
-            
-            // FIXED: Mark as ATH purchase if bought at or above current ATH price
-            purchase.isATHPurchase = currentPriceData.price >= allTimeHighPrice;
-            
-            athPurchases.push(purchase);
-            
-            // Update volume and check for round rewards
-            updateRoundRewards(purchase);
-            
-            if (purchase.isATHPurchase) {
-              logToConsole(`🎯 ATH PURCHASE! Wallet: ${purchase.wallet}, Price: $${currentPriceData.price.toFixed(8)}, ATH: $${allTimeHighPrice.toFixed(8)}`, 'success');
+      // Transaction check every 5 seconds (instead of every loop)
+      if (now - lastTransactionCheck > POLL_INTERVAL_MS) {
+        const newPurchases = await monitorNewTokenTransactions();
+        if (newPurchases.length > 0 && currentPriceData) {
+          for (const purchaseGroup of newPurchases) {
+            if (!purchaseGroup) continue;
+            for (const purchase of purchaseGroup) {
+              purchase.marketPrice = currentPriceData.price;
+              
+              // Mark as ATH purchase if bought at or above current ATH price
+              purchase.isATHPurchase = currentPriceData.price >= allTimeHighPrice;
+              
+              athPurchases.push(purchase);
+              
+              // Update volume and check for round rewards
+              updateRoundRewards(purchase);
+              
+              if (purchase.isATHPurchase) {
+                logToConsole(`🎯 ATH PURCHASE! Wallet: ${purchase.wallet}, Price: $${currentPriceData.price.toFixed(8)}, ATH: $${allTimeHighPrice.toFixed(8)}`, 'success');
+              }
             }
           }
+          broadcastUpdate();
         }
-        broadcastUpdate();
+        lastTransactionCheck = now;
       }
       
+      // Cleanup operations (less frequent)
       if (processedTransactions.size > 10000) {
         const toRemove = Array.from(processedTransactions).slice(0, 5000);
         toRemove.forEach(sig => processedTransactions.delete(sig));
@@ -920,7 +944,9 @@ async function loop() {
     } catch (e) {
       logToConsole(`❌ Error in main loop: ${e.message}`, 'error');
     }
-    await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+    
+    // Shorter sleep since we're now using timers
+    await new Promise(r => setTimeout(r, 1000));
   }
 }
 
@@ -928,6 +954,7 @@ loop().catch(e => {
   logToConsole(`💥 Fatal error: ${e.message}`, 'error');
   process.exit(1);
 });
+
 
 
 
