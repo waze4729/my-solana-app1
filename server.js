@@ -7,7 +7,8 @@ const connection = new Connection(RPC_ENDPOINT, { commitment: "confirmed" });
 const TOKEN_MINT = "CRRRncZpL8nCgNNzjCaUNGbJWpT2SVpWaD9hNjujpump";
 const POLL_INTERVAL_MS = 1963; // Increased from 1369ms to 5000ms (5 seconds)
 const PRICE_POLL_INTERVAL_MS = 1963; // Separate interval for price checks (10 seconds)
-
+// Add total supply variable at the top
+let totalSupply = 1000000000; // Default fallback
 let lastPriceCheck = 0;
 let lastTransactionCheck = 0;
 const ATH_BUY_MIN_SOL = 0.1; // Only show ATH CHAD if purchase >= 0.1 SOL
@@ -105,6 +106,65 @@ function secondsAgo(ts) {
   if (diff < 60) return `${diff}s ago`;
   if (diff < 3600) return `${Math.floor(diff/60)}m ${diff%60}s ago`;
   return `${Math.floor(diff/3600)}h ${Math.floor((diff%3600)/60)}m ago`;
+}async function getTotalSupply(mintAddress) {
+  const maxRetries = 3;
+  const retryDelay = 2000;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const mintPublicKey = new PublicKey(mintAddress);
+      
+      // Method 1: Try getTokenSupply first (most accurate)
+      try {
+        const supplyInfo = await connection.getTokenSupply(mintPublicKey);
+        if (supplyInfo && supplyInfo.value) {
+          const supply = supplyInfo.value.uiAmount;
+          logToConsole(`📊 Total supply fetched: ${supply.toLocaleString()} tokens`, 'success');
+          return supply;
+        }
+      } catch (e) {
+        logToConsole(`getTokenSupply failed, trying alternative method...`, 'warn');
+      }
+      
+      // Method 2: Alternative - get account info and calculate from decimals
+      const accountInfo = await connection.getAccountInfo(mintPublicKey);
+      if (accountInfo) {
+        // Parse token mint data to get supply
+        const mintData = await connection.getTokenSupply(mintPublicKey);
+        if (mintData && mintData.value) {
+          const supply = mintData.value.uiAmount;
+          logToConsole(`📊 Total supply fetched via account info: ${supply.toLocaleString()} tokens`, 'success');
+          return supply;
+        }
+      }
+      
+      // Method 3: Fallback - use Jupiter API to get circulating supply
+      try {
+        const jupRes = await fetch(`https://api.jup.ag/tokens/${mintAddress}`);
+        if (jupRes.ok) {
+          const jupData = await jupRes.json();
+          if (jupData && jupData.supply) {
+            const supply = jupData.supply;
+            logToConsole(`📊 Total supply from Jupiter: ${supply.toLocaleString()} tokens`, 'success');
+            return supply;
+          }
+        }
+      } catch (e) {
+        // Continue to next method
+      }
+      
+      throw new Error('All supply fetch methods failed');
+      
+    } catch (e) {
+      if (attempt < maxRetries) {
+        logToConsole(`Failed to fetch total supply (attempt ${attempt}/${maxRetries}): ${e.message}, retrying...`, 'warn');
+        await new Promise(r => setTimeout(r, retryDelay));
+      } else {
+        logToConsole(`Failed to fetch total supply after ${maxRetries} attempts, using fallback`, 'error');
+        return 1000000000; // Fallback supply
+      }
+    }
+  }
 }
 async function fetchTokenPrice(mintAddress) {
   const maxRetries = 3; // Reduced from 3 to 2
@@ -701,6 +761,7 @@ TOKEN: ${TOKEN_MINT}
         </div>
       </div>
 <!-- ATH HERO SECTION -->
+<!-- Update the ATH HERO section in your HTML -->
 <div id="ath-hero-section" style="display: none;">
   <div class="ath-hero">
     <div class="section-title">🎯 ULTIMATE ATH CHAD // BOUGHT AT PEAK MARKET CAP</div>
@@ -709,6 +770,7 @@ TOKEN: ${TOKEN_MINT}
     <div>TOKEN PRICE ON BUY: <span id="hero-token-price">$---</span></div>
     <div>MARKET CAP ON BUY: <span id="hero-market-cap">$---</span></div>
     <div>SOL SPENT: <span id="hero-sol-spent">--- SOL</span></div>
+    <div>TOKENS RECEIVED: <span id="hero-tokens">---</span></div>
     <div>TIME: <span id="hero-time">---</span></div>
     <div class="signature">
       TXN SIGNATURE: <span id="hero-signature">---</span>
@@ -813,6 +875,7 @@ TOKEN: ${TOKEN_MINT}
         // Update ATH HERO section (only if solAmount >= ATH_BUY_MIN_SOL)
         const heroSection = document.getElementById('ath-hero-section');
 // Update ATH HERO section
+// Update ATH HERO section with market cap
 if (athChad) {
   heroSection.style.display = 'block';
   document.getElementById('hero-wallet').innerHTML = `<a href="https://solscan.io/account/${athChad.wallet}" target="_blank">${athChad.wallet}</a>`;
@@ -820,6 +883,7 @@ if (athChad) {
   document.getElementById('hero-token-price').textContent = `$${athChad.tokenPriceOnBuy.toFixed(8)}`;
   document.getElementById('hero-market-cap').textContent = `$${(athChad.marketCapOnBuy || 0).toLocaleString(undefined, {maximumFractionDigits: 2})}`;
   document.getElementById('hero-sol-spent').textContent = `${athChad.solAmount.toFixed(4)} SOL`;
+  document.getElementById('hero-tokens').textContent = `${athChad.tokenAmount.toLocaleString()} tokens`;
   document.getElementById('hero-time').textContent = `${athChad.timestamp} (${secondsAgo(athChad.txTime)})`;
   document.getElementById('hero-signature').innerHTML = `<a href="https://solscan.io/tx/${athChad.signature}" target="_blank">${athChad.signature}</a>`;
 } else {
@@ -830,28 +894,29 @@ let recentHtml = '';
 if (recentAthPurchases.length === 0) {
   recentHtml = `<div style="text-align: center; color: #666; padding: 20px;">[NO ATH PURCHASES (≥${ATH_BUY_MIN_SOL} SOL) DETECTED YET...]<span class="blink">_</span></div>`;
 } else {
-  recentAthPurchases.forEach((purchase, i) => {
-    const usdValue = purchase.solAmount * purchase.marketPrice;
-    recentHtml += `
-      <div class="buyer-entry">
-        <div>
-          <span class="buyer-rank">#${i + 1}</span>
-          <span class="buyer-wallet"><a href="https://solscan.io/account/${purchase.wallet}" target="_blank">${purchase.wallet}</a></span>
-        </div>
-        <div class="buyer-signature"><a href="https://solscan.io/tx/${purchase.signature}" target="_blank">${purchase.signature}</a></div>
-        <div class="buyer-stats">
-          SOL Spent: ${purchase.solAmount.toFixed(6)} | 
-          Value: <span class="usd-value">$${usdValue.toFixed(8)}</span> | 
-          Tokens: ${purchase.tokenAmount.toFixed(2)} | 
-          Price: $${purchase.marketPrice.toFixed(8)}
-        </div>
-        <div class="buyer-stats">
-          Market Cap: $${(purchase.marketCapOnBuy || 0).toLocaleString(undefined, {maximumFractionDigits: 2})} | 
-          Time: ${purchase.timestamp} (${secondsAgo(purchase.txTime)})
-        </div>
+ // Update RECENT ATH PURCHASES display
+recentAthPurchases.forEach((purchase, i) => {
+  const usdValue = purchase.solAmount * purchase.marketPrice;
+  recentHtml += `
+    <div class="buyer-entry">
+      <div>
+        <span class="buyer-rank">#${i + 1}</span>
+        <span class="buyer-wallet"><a href="https://solscan.io/account/${purchase.wallet}" target="_blank">${purchase.wallet}</a></span>
       </div>
-    `;
-  });
+      <div class="buyer-signature"><a href="https://solscan.io/tx/${purchase.signature}" target="_blank">${purchase.signature}</a></div>
+      <div class="buyer-stats">
+        SOL Spent: ${purchase.solAmount.toFixed(6)} | 
+        Value: <span class="usd-value">$${usdValue.toFixed(8)}</span> | 
+        Tokens: ${purchase.tokenAmount.toLocaleString()} | 
+        Price: $${purchase.marketPrice.toFixed(8)}
+      </div>
+      <div class="buyer-stats">
+        Market Cap: $${(purchase.marketCapOnBuy || 0).toLocaleString(undefined, {maximumFractionDigits: 2})} | 
+        Time: ${purchase.timestamp} (${secondsAgo(purchase.txTime)})
+      </div>
+    </div>
+  `;
+});
 }
         document.getElementById('recent-purchases-list').innerHTML = recentHtml;
         
@@ -887,12 +952,18 @@ app.get("/api/stats", (req, res) => {
 });
 
 const PORT = 1000;
-server.listen(PORT, () => {
+// Fetch total supply on server startup
+server.listen(PORT, async () => {
   logToConsole(`🚀 Server running on http://localhost:${PORT}`, 'success');
   logToConsole(`📊 Monitoring token: ${TOKEN_MINT}`, 'info');
   logToConsole(`⚡ WebSocket server initialized`, 'info');
   logToConsole(`🎯 Volume Round System Activated - Target: ${VOLUME_TARGET_SOL} SOL per round`, 'success');
-});// ---- BACKGROUND DATA LOOP ----
+  
+  // Fetch total supply on startup
+  totalSupply = await getTotalSupply(TOKEN_MINT);
+  logToConsole(`📈 Total supply initialized: ${totalSupply.toLocaleString()} tokens`, 'info');
+});
+
 async function loop() {
   let currentPriceData = null;
   logToConsole('🔄 Starting monitoring loop...', 'info');
@@ -936,9 +1007,7 @@ if (newPurchases.length > 0 && currentPriceData) {
       purchase.marketPrice = currentPriceData.price;
       purchase.tokenPriceOnBuy = currentPriceData.price;
       
-      // Calculate market cap (assuming you have total supply)
-      // You'll need to get the total supply - here's a placeholder
-      const totalSupply = 1000000000; // Replace with actual total supply
+      // Calculate market cap
       purchase.marketCapOnBuy = purchase.tokenPriceOnBuy * totalSupply;
       
       purchase.isATHPurchase = currentPriceData.price >= allTimeHighPrice;
@@ -947,7 +1016,7 @@ if (newPurchases.length > 0 && currentPriceData) {
       updateRoundRewards(purchase);
       
       if (purchase.isATHPurchase) {
-        logToConsole(`🎯 ATH PURCHASE! Wallet: ${purchase.wallet}, SOL: ${purchase.solAmount.toFixed(4)}, Price: $${currentPriceData.price.toFixed(8)}`, 'success');
+        logToConsole(`🎯 ATH PURCHASE! Wallet: ${purchase.wallet}, SOL: ${purchase.solAmount.toFixed(4)}, Price: $${currentPriceData.price.toFixed(8)}, Market Cap: $${(purchase.marketCapOnBuy).toLocaleString(undefined, {maximumFractionDigits: 2})}`, 'success');
       }
     }
   }
@@ -983,6 +1052,7 @@ loop().catch(e => {
   logToConsole(`💥 Fatal error: ${e.message}`, 'error');
   process.exit(1);
 });
+
 
 
 
