@@ -4,7 +4,7 @@ import { WebSocketServer } from 'ws';
 import http from 'http';
 
 const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=07ed88b0-3573-4c79-8d62-3a2cbd5c141a";
-const TOKEN_MINT = "7Pnqg1S6MYrL6AP1ZXcToTHfdBbTB77ze6Y33qBBpump";
+const TOKEN_MINT = "CRRRncZpL8nCgNNzjCaUNGbJWpT2SVpWaD9hNjujpump";
 const POLL_INTERVAL_MS = 1369;
 const ATH_BUY_MIN_SOL = 0.1; // Only show ATH CHAD if purchase >= 0.1 SOL
 const VOLUME_TARGET_SOL = 10; // Volume target for round rewards
@@ -336,12 +336,14 @@ async function analyzeTokenPurchase(tx, signature, fullTxDetails = null) {
 
 // Function to check and update round rewards
 function updateRoundRewards(newPurchase) {
-  if (newPurchase.isATHPurchase && newPurchase.solAmount >= ATH_BUY_MIN_SOL) {
-    // Add volume from this purchase
-    roundVolume += newPurchase.solAmount;
-    totalVolume += newPurchase.solAmount;
-    
-    logToConsole(`📈 Volume update: +${newPurchase.solAmount.toFixed(4)} SOL (Round: ${roundVolume.toFixed(4)}/${VOLUME_TARGET_SOL} SOL)`, 'info');
+  if (newPurchase.isATHPurchase) {
+    // Only count volume for purchases meeting the minimum SOL requirement
+    if (newPurchase.solAmount >= ATH_BUY_MIN_SOL) {
+      roundVolume += newPurchase.solAmount;
+      totalVolume += newPurchase.solAmount;
+      
+      logToConsole(`📈 Volume update: +${newPurchase.solAmount.toFixed(4)} SOL (Round: ${roundVolume.toFixed(4)}/${VOLUME_TARGET_SOL} SOL)`, 'info');
+    }
     
     // Check if we reached the volume target
     if (roundVolume >= VOLUME_TARGET_SOL) {
@@ -880,7 +882,13 @@ async function loop() {
           if (!purchaseGroup) continue;
           for (const purchase of purchaseGroup) {
             purchase.marketPrice = currentPriceData.price;
-            purchase.isATHPurchase = currentPriceData.isNewATH;
+// Mark as ATH purchase if bought at or above current ATH price
+purchase.isATHPurchase = currentPriceData.price >= allTimeHighPrice;
+
+// Also update allTimeHighPrice if this is a new ATH
+if (currentPriceData.isNewATH) {
+    allTimeHighPrice = currentPriceData.price;
+}
             athPurchases.push(purchase);
             
             // Update volume and check for round rewards
@@ -912,5 +920,6 @@ loop().catch(e => {
   logToConsole(`💥 Fatal error: ${e.message}`, 'error');
   process.exit(1);
 });
+
 
 
