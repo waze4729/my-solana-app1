@@ -44,15 +44,17 @@ function broadcastUpdate() {
     if (ws.readyState === 1) ws.send(JSON.stringify(data));
   });
 }
-
 function getCurrentDashboardData() {
   const lastPrice = priceHistory.length > 0 ? priceHistory[priceHistory.length - 1] : { price: 0, priceChange24h: 0 };
-  // Only show ATH CHAD if >= 0.1 SOL, but show all recent ATH purchases in the list
+  
+  // Only show ATH CHAD if >= 0.1 SOL
   const athChad = athPurchases
     .filter(p => p.isATHPurchase && p.solAmount >= ATH_BUY_MIN_SOL)
     .sort((a, b) => b.marketPrice - a.marketPrice)[0] || null;
+  
+  // FILTER: Only show ATH purchases with >= 0.1 SOL in the recent list
   const recentAthPurchases = athPurchases
-    .filter(p => p.isATHPurchase)
+    .filter(p => p.isATHPurchase && p.solAmount >= ATH_BUY_MIN_SOL) // ← ADDED FILTER
     .sort((a, b) => b.txTime - a.txTime)
     .slice(0, 20);
   
@@ -66,8 +68,8 @@ function getCurrentDashboardData() {
     fullTransactions,
     consoleMessages,
     stats: {
-      totalATHPurchases: athPurchases.filter(p => p.isATHPurchase).length,
-      uniqueBuyers: new Set(athPurchases.filter(p => p.isATHPurchase).map(p => p.wallet)).size,
+      totalATHPurchases: athPurchases.filter(p => p.isATHPurchase && p.solAmount >= ATH_BUY_MIN_SOL).length, // Updated count
+      uniqueBuyers: new Set(athPurchases.filter(p => p.isATHPurchase && p.solAmount >= ATH_BUY_MIN_SOL).map(p => p.wallet)).size, // Updated count
       trackedTransactions: fullTransactions.length,
       lastPrice: lastPrice.price || 0,
       priceChange24h: lastPrice.priceChange24h || 0,
@@ -325,22 +327,25 @@ async function analyzeTokenPurchase(tx, signature, fullTxDetails = null) {
       let pricePerToken = 0;
       if (solSpent > 0 && tokenAmount > 0) pricePerToken = solSpent / tokenAmount;
       
-      const purchaseDetails = {
-        wallet: wallet,
-        buyerAddress: buyer,
-        signature: signature,
-        timestamp: tx.blockTime ? new Date(tx.blockTime * 1000).toISOString() : "unknown",
-        txTime: tx.blockTime ? tx.blockTime * 1000 : Date.now(),
-        solAmount: solSpent,
-        tokenAmount: tokenAmount,
-        pricePerToken: pricePerToken,
-        marketPrice: 0, // Will be set later with current price
-        isATHPurchase: false, // Will be set later
-        allAddresses: accountAddresses,
-        slot: tx.slot || 0,
-        fee: tx.meta.fee ? tx.meta.fee / LAMPORTS_PER_SOL : 0,
-        computeUnits: tx.meta.computeUnitsConsumed || null
-      };
+// In analyzeTokenPurchase function, add these calculations:
+const purchaseDetails = {
+  wallet: wallet,
+  buyerAddress: buyer,
+  signature: signature,
+  timestamp: tx.blockTime ? new Date(tx.blockTime * 1000).toISOString() : "unknown",
+  txTime: tx.blockTime ? tx.blockTime * 1000 : Date.now(),
+  solAmount: solSpent,
+  tokenAmount: tokenAmount,
+  pricePerToken: pricePerToken,
+  marketPrice: 0, // Will be set with current price
+  marketCapOnBuy: 0, // Will be calculated
+  tokenPriceOnBuy: 0, // Will be set with current price
+  isATHPurchase: false,
+  allAddresses: accountAddresses,
+  slot: tx.slot || 0,
+  fee: tx.meta.fee ? tx.meta.fee / LAMPORTS_PER_SOL : 0,
+  computeUnits: tx.meta.computeUnitsConsumed || null
+};
       
       if (fullTxDetails) purchaseDetails.fullTransaction = fullTxDetails;
       purchases.push(purchaseDetails);
@@ -695,19 +700,21 @@ TOKEN: ${TOKEN_MINT}
           <!-- Round rewards will be populated here -->
         </div>
       </div>
-      
-      <!-- ATH HERO SECTION -->
-      <div id="ath-hero-section" style="display: none;">
-        <div class="ath-hero">
-          <div class="section-title">🎯 ULTIMATE ATH CHAD // BOUGHT AT PEAK MARKET CAP</div>
-          <div>WALLET: <span class="wallet" id="hero-wallet">---</span></div>
-          <div>PRICE PAID: <span class="price" id="hero-price">$---</span></div>
-          <div>TIME: <span id="hero-time">---</span></div>
-          <div class="signature">
-            TXN SIGNATURE: <span id="hero-signature">---</span>
-          </div>
-        </div>
-      </div>
+<!-- ATH HERO SECTION -->
+<div id="ath-hero-section" style="display: none;">
+  <div class="ath-hero">
+    <div class="section-title">🎯 ULTIMATE ATH CHAD // BOUGHT AT PEAK MARKET CAP</div>
+    <div>WALLET: <span class="wallet" id="hero-wallet">---</span></div>
+    <div>PRICE PAID: <span class="price" id="hero-price">$---</span></div>
+    <div>TOKEN PRICE ON BUY: <span id="hero-token-price">$---</span></div>
+    <div>MARKET CAP ON BUY: <span id="hero-market-cap">$---</span></div>
+    <div>SOL SPENT: <span id="hero-sol-spent">--- SOL</span></div>
+    <div>TIME: <span id="hero-time">---</span></div>
+    <div class="signature">
+      TXN SIGNATURE: <span id="hero-signature">---</span>
+    </div>
+  </div>
+</div>
       
       <!-- RECENT ATH PURCHASES -->
       <div class="section">
@@ -805,43 +812,47 @@ TOKEN: ${TOKEN_MINT}
         
         // Update ATH HERO section (only if solAmount >= ATH_BUY_MIN_SOL)
         const heroSection = document.getElementById('ath-hero-section');
-        if (athChad) {
-          heroSection.style.display = 'block';
-          document.getElementById('hero-wallet').innerHTML = \`<a href="https://solscan.io/account/\${athChad.wallet}" target="_blank">\${athChad.wallet}</a>\`;
-          document.getElementById('hero-price').textContent = \`$\${athChad.marketPrice.toFixed(8)}\`;
-          document.getElementById('hero-time').textContent = \`\${athChad.timestamp} (\${secondsAgo(athChad.txTime)})\`;
-          document.getElementById('hero-signature').innerHTML = \`<a href="https://solscan.io/tx/\${athChad.signature}" target="_blank">\${athChad.signature}</a>\`;
-        } else {
-          heroSection.style.display = 'none';
-        }
-        
-        // Update RECENT ATH PURCHASES (show all, not just >=0.1 SOL)
-        let recentHtml = '';
-        if (recentAthPurchases.length === 0) {
-          recentHtml = \`<div style="text-align: center; color: #666; padding: 20px;">[NO ATH PURCHASES DETECTED YET...]<span class="blink">_</span></div>\`;
-        } else {
-          recentAthPurchases.forEach((purchase, i) => {
-            const usdValue = purchase.solAmount * purchase.marketPrice;
-            recentHtml += \`
-              <div class="buyer-entry">
-                <div>
-                  <span class="buyer-rank">#\${i + 1}</span>
-                  <span class="buyer-wallet"><a href="https://solscan.io/account/\${purchase.wallet}" target="_blank">\${purchase.wallet}</a></span>
-                </div>
-                <div class="buyer-signature"><a href="https://solscan.io/tx/\${purchase.signature}" target="_blank">\${purchase.signature}</a></div>
-                <div class="buyer-stats">
-                  SOL: \${purchase.solAmount.toFixed(6)} | 
-                  Value: <span class="usd-value">$\${usdValue.toFixed(8)}</span> | 
-                  Tokens: \${purchase.tokenAmount.toFixed(2)} | 
-                  Price: $\${purchase.marketPrice.toFixed(8)}
-                </div>
-                <div class="buyer-stats">
-                  Time: \${purchase.timestamp} (\${secondsAgo(purchase.txTime)})
-                </div>
-              </div>
-            \`;
-          });
-        }
+// Update ATH HERO section
+if (athChad) {
+  heroSection.style.display = 'block';
+  document.getElementById('hero-wallet').innerHTML = `<a href="https://solscan.io/account/${athChad.wallet}" target="_blank">${athChad.wallet}</a>`;
+  document.getElementById('hero-price').textContent = `$${athChad.marketPrice.toFixed(8)}`;
+  document.getElementById('hero-token-price').textContent = `$${athChad.tokenPriceOnBuy.toFixed(8)}`;
+  document.getElementById('hero-market-cap').textContent = `$${(athChad.marketCapOnBuy || 0).toLocaleString(undefined, {maximumFractionDigits: 2})}`;
+  document.getElementById('hero-sol-spent').textContent = `${athChad.solAmount.toFixed(4)} SOL`;
+  document.getElementById('hero-time').textContent = `${athChad.timestamp} (${secondsAgo(athChad.txTime)})`;
+  document.getElementById('hero-signature').innerHTML = `<a href="https://solscan.io/tx/${athChad.signature}" target="_blank">${athChad.signature}</a>`;
+} else {
+  heroSection.style.display = 'none';
+}
+     // Update RECENT ATH PURCHASES (show only >=0.1 SOL)
+let recentHtml = '';
+if (recentAthPurchases.length === 0) {
+  recentHtml = `<div style="text-align: center; color: #666; padding: 20px;">[NO ATH PURCHASES (≥${ATH_BUY_MIN_SOL} SOL) DETECTED YET...]<span class="blink">_</span></div>`;
+} else {
+  recentAthPurchases.forEach((purchase, i) => {
+    const usdValue = purchase.solAmount * purchase.marketPrice;
+    recentHtml += `
+      <div class="buyer-entry">
+        <div>
+          <span class="buyer-rank">#${i + 1}</span>
+          <span class="buyer-wallet"><a href="https://solscan.io/account/${purchase.wallet}" target="_blank">${purchase.wallet}</a></span>
+        </div>
+        <div class="buyer-signature"><a href="https://solscan.io/tx/${purchase.signature}" target="_blank">${purchase.signature}</a></div>
+        <div class="buyer-stats">
+          SOL Spent: ${purchase.solAmount.toFixed(6)} | 
+          Value: <span class="usd-value">$${usdValue.toFixed(8)}</span> | 
+          Tokens: ${purchase.tokenAmount.toFixed(2)} | 
+          Price: $${purchase.marketPrice.toFixed(8)}
+        </div>
+        <div class="buyer-stats">
+          Market Cap: $${(purchase.marketCapOnBuy || 0).toLocaleString(undefined, {maximumFractionDigits: 2})} | 
+          Time: ${purchase.timestamp} (${secondsAgo(purchase.txTime)})
+        </div>
+      </div>
+    `;
+  });
+}
         document.getElementById('recent-purchases-list').innerHTML = recentHtml;
         
         // Update console
@@ -917,30 +928,31 @@ async function loop() {
       if (now - lastTransactionCheck > POLL_INTERVAL_MS) {
         try {
           const newPurchases = await monitorNewTokenTransactions();
-          if (newPurchases.length > 0 && currentPriceData) {
-            for (const purchaseGroup of newPurchases) {
-              if (!purchaseGroup) continue;
-              for (const purchase of purchaseGroup) {
-                // Use the current price data for this purchase
-                purchase.marketPrice = currentPriceData.price;
-                
-                // FIX: Proper ATH detection - compare purchase price to current ATH
-                purchase.isATHPurchase = currentPriceData.price >= allTimeHighPrice;
-                
-                athPurchases.push(purchase);
-                
-                // Update volume and check for round rewards
-                updateRoundRewards(purchase);
-                
-                if (purchase.isATHPurchase) {
-                  logToConsole(`🎯 ATH PURCHASE! Wallet: ${purchase.wallet}, SOL: ${purchase.solAmount.toFixed(4)}, Price: $${currentPriceData.price.toFixed(8)}`, 'success');
-                } else {
-                  logToConsole(`📊 Regular purchase: ${purchase.wallet}, SOL: ${purchase.solAmount.toFixed(4)}`, 'info');
-                }
-              }
-            }
-            broadcastUpdate(); // Update the interface
-          }
+       // In your main loop, when processing purchases:
+if (newPurchases.length > 0 && currentPriceData) {
+  for (const purchaseGroup of newPurchases) {
+    if (!purchaseGroup) continue;
+    for (const purchase of purchaseGroup) {
+      purchase.marketPrice = currentPriceData.price;
+      purchase.tokenPriceOnBuy = currentPriceData.price;
+      
+      // Calculate market cap (assuming you have total supply)
+      // You'll need to get the total supply - here's a placeholder
+      const totalSupply = 1000000000; // Replace with actual total supply
+      purchase.marketCapOnBuy = purchase.tokenPriceOnBuy * totalSupply;
+      
+      purchase.isATHPurchase = currentPriceData.price >= allTimeHighPrice;
+      
+      athPurchases.push(purchase);
+      updateRoundRewards(purchase);
+      
+      if (purchase.isATHPurchase) {
+        logToConsole(`🎯 ATH PURCHASE! Wallet: ${purchase.wallet}, SOL: ${purchase.solAmount.toFixed(4)}, Price: $${currentPriceData.price.toFixed(8)}`, 'success');
+      }
+    }
+  }
+  broadcastUpdate();
+}
         } catch (e) {
           logToConsole(`Transaction monitoring error: ${e.message}`, 'error');
         }
@@ -971,6 +983,7 @@ loop().catch(e => {
   logToConsole(`💥 Fatal error: ${e.message}`, 'error');
   process.exit(1);
 });
+
 
 
 
